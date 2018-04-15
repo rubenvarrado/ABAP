@@ -1,0 +1,37 @@
+*&---------------------------------------------------------------------*
+*& Report  ZRGR_ALV1
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT ZRGR_ALV1.
+
+*&---------------------------------------------------------------------*
+*& Data Declaration
+*&---------------------------------------------------------------------*
+DATA: gt_spfli     TYPE TABLE OF spfli.
+DATA: gr_table     TYPE REF TO   cl_salv_table.
+DATA: gr_functions TYPE REF TO   cl_salv_functions_list.
+*&---------------------------------------------------------------------*
+*& Start-of-Selection
+*&---------------------------------------------------------------------*
+START-OF-SELECTION.
+  SELECT * UP TO 10 ROWS FROM spfli INTO TABLE gt_spfli.
+
+**Generate an instance of the ALV table object
+  CALL METHOD cl_salv_table=>factory
+    IMPORTING
+      r_salv_table = gr_table
+    CHANGING
+      t_table      = gt_spfli.
+
+**Get the reference to the ALV toolbar functions
+  gr_functions = gr_table->get_functions( ).
+
+**Set the sort ascending function
+*  gr_functions->set_sort_asc( abap_true ).
+  gr_functions->set_all( abap_true ).
+**Display the ALV table.
+  gr_table->display( ).
