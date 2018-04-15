@@ -1,0 +1,94 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0003_I01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  PAI_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE PAI_100 INPUT.
+call method cl_gui_cfw=>dispatch.
+
+  MOVE SY-UCOMM TO GV_OK_CODE.
+  CASE GV_OK_CODE.
+    when 'LOG'.
+      PERFORM F_REVISAR_ERRORES.
+    when 'ACTUALIZAR'.
+      PERFORM F_ACTUALIZAR_ALV.
+    when 'GRABAR'.
+      PERFORM F_ACTUALIZAR_MESA_FM.
+    when 'BORRAR'.
+*      PERFORM F_BORRAR_MESA_LINES.
+      PERFORM F_SET_SMOKER USING ''.
+    WHEN 'BACK'. " Finish program
+      IF NOT g_docking_container_1 IS INITIAL.
+        " destroy tree containers (detroys contained tree control, too)
+        CALL METHOD g_docking_container_1->FREE
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CALL METHOD g_docking_container_2->FREE
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CALL METHOD CL_GUI_CFW=>FLUSH
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CLEAR g_docking_container_1.
+        CLEAR G_tree.
+        CLEAR g_docking_container_2.
+        CLEAR g_alv.
+      ENDIF.
+*      CALL SELECTION-SCREEN 1000.
+      LEAVE TO CURRENT TRANSACTION.
+*      leave to SCREEN 1000.
+*      SET SCREEN 1000.
+*      SET SCREEN 0.
+    when 'EXIT'.
+      IF NOT g_docking_container_1 IS INITIAL.
+        " destroy tree containers (detroys contained tree control, too)
+        CALL METHOD g_docking_container_1->FREE
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CALL METHOD g_docking_container_2->FREE
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CALL METHOD CL_GUI_CFW=>FLUSH
+          EXCEPTIONS
+            CNTL_SYSTEM_ERROR = 1
+            CNTL_ERROR        = 2.
+        IF SY-SUBRC <> 0.
+          MESSAGE A000.
+        ENDIF.
+        CLEAR g_docking_container_1.
+        CLEAR G_tree.
+        CLEAR g_docking_container_2.
+        CLEAR g_alv.
+      ENDIF.
+      LEAVE PROGRAM.
+
+  ENDCASE.
+
+* CAUTION: clear ok code!
+
+  CLEAR GV_OK_CODE.
+ENDMODULE.                 " PAI_0100  INPUT
+*** INCLUDE bcalv_dnd_03_I01

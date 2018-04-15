@@ -1,0 +1,1240 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0003_F01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  CREATE_AND_INIT_CONTROLS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form create_and_init_controls.
+  gv_repid = sy-repid.
+  PERFORM F_CONSEGUIR_NODOS.
+* create docking container for tree control
+  CREATE OBJECT g_docking_container_1
+    EXPORTING
+      repid     = gv_repid
+      dynnr     = '100'
+      extension = 195
+      side      = cl_gui_docking_container=>dock_at_left.
+  if sy-subrc <> 0.
+    message a000.
+  endif.
+
+* create docking container for alv control
+  CREATE OBJECT g_docking_container_2
+    EXPORTING
+      repid     = gv_repid
+      dynnr     = '100'
+      extension = 450
+      side      = cl_gui_docking_container=>dock_at_top.
+  if sy-subrc <> 0.
+    message a000.
+  endif.
+
+* create left tree control
+  CREATE OBJECT g_tree
+    EXPORTING
+      parent                      = g_docking_container_1
+      node_selection_mode         = cl_gui_simple_tree=>node_sel_mode_single
+    EXCEPTIONS
+      lifetime_error              = 1
+      cntl_system_error           = 2
+      create_error                = 3
+      failed                      = 4
+      illegal_node_selection_mode = 5.
+  if sy-subrc <> 0.
+    message a000.
+  endif.
+
+* create alv control
+  CREATE OBJECT g_alv
+    EXPORTING
+      i_parent = g_docking_container_2.
+
+* create the application object
+* this object is needed to handle the ABAP Objects Events of
+* Controls
+  CREATE OBJECT g_application.
+
+* Events tree control (drag source)
+  set handler g_application->handle_tree_drag for g_tree.
+
+* Events alv control (drop target)
+  set handler g_application->handle_alv_drop for g_alv.
+
+* build tree nodes filling 'g_node_table'
+* and describe behaviour of drag&drop:
+  perform build_nodes_and_tree_handles.
+
+* build tree
+  CALL METHOD g_tree->add_nodes
+    EXPORTING
+      table_structure_name           = 'MTREESNODE'
+      node_table                     = g_node_table
+    EXCEPTIONS
+      failed                         = 1
+      error_in_node_table            = 2
+      dp_error                       = 3
+      table_structure_name_not_found = 4
+      others                         = 5.
+  if sy-subrc <> 0.
+    message a000.
+  endif.
+
+* expand folder initially for convenience
+  CALL METHOD g_tree->expand_node
+    EXPORTING
+      node_key = 'CELLFUNC'.
+
+* aqui rellenamos la tabla de datos para el ALV
+  perform build_data_and_alv_handles.
+* provide a title
+  gs_layout-grid_title = text-101.
+  gs_layout-sel_mode = 'A'. "GAM
+
+*DATA:gt_fcat TYPE lvc_t_fcat,
+*ls_fcat TYPE lvc_s_fcat.
+*
+*CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+*EXPORTING
+*I_STRUCTURE_NAME = 'ZESD_0103'
+**I_CLIENT_NEVER_DISPLAY = 'X'
+**I_BYPASSING_BUFFER =
+*CHANGING
+*CT_FIELDCAT = gt_fcat
+*EXCEPTIONS
+*OTHERS = 3.
+
+
+  CALL METHOD g_alv->set_table_for_first_display
+    EXPORTING
+      i_structure_name              = 'ZESD_0103'
+      is_layout                     = gs_layout
+      i_save                        = gv_save
+      is_variant                    = gv_variant
+    CHANGING
+      it_outtab                     = gt_outtab[]
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+
+
+
+  CREATE OBJECT event_receiver.
+
+  set handler event_receiver->handle_double_click for g_alv.
+
+
+endform.                               " CREATE_AND_INIT_CONTROLS
+*&---------------------------------------------------------------------*
+*&      Form  build_nodes_and_handles
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+form build_nodes_and_tree_handles.
+
+  data: node like mtreesnode,
+        effect type i,
+        handle_tree_set type i,
+        handle_tree_clear type i.
+  DATA: LV_NODEKEY(12) TYPE C,
+        LV_INDEX(3) TYPE C.
+* § 3. Define a behaviour for drag and drop on tree nodes and
+*      pass handles to the relevant nodes.
+
+* To insure that the smoker flag can only be set if it is not already
+* set, two flavors are used. It is also possible to use one flavor,
+* e.g., 'switch' and to check in the event handler method 'OnDrop'
+* if the smoker flag is already set.
+
+  CREATE OBJECT g_behaviour_tree_set.
+  effect = cl_dragdrop=>copy.
+  CALL METHOD g_behaviour_tree_set->add
+    EXPORTING
+      flavor     = 'set_smoker'
+      dragsrc    = 'X'
+      droptarget = ' '
+      effect     = effect.
+  CALL METHOD g_behaviour_tree_set->get_handle
+    IMPORTING
+      handle = handle_tree_set.
+
+  CREATE OBJECT g_behaviour_tree_clear.
+  effect = cl_dragdrop=>move.
+  CALL METHOD g_behaviour_tree_clear->add
+    EXPORTING
+      flavor     = 'clear_smoker'
+      dragsrc    = 'X'
+      droptarget = ' '
+      effect     = effect.
+  CALL METHOD g_behaviour_tree_clear->get_handle
+    IMPORTING
+      handle = handle_tree_clear.
+
+  clear node.
+  node-node_key = 'CELLFUNC'.
+  node-isfolder = 'X'.
+  node-text = 'smoker functions:'(110).
+  append node to g_node_table.
+
+*  LOOP AT GT_HRP1000 INTO GS_HRP1000.
+  LOOP AT GT_KNA1 INTO GS_KNA1.
+    clear node.
+    MOVE sy-tabix TO LV_NODEKEY.
+*  node-node_key = 'SET'.
+    node-node_key = LV_NODEKEY.
+    node-relatkey = 'CELLFUNC'.
+    node-relatship = cl_gui_simple_tree=>relat_last_child.
+*  node-text = 'Set'(120).
+*    node-text = GS_HRP1000-SORTL.
+    node-text = GS_KNA1-SORTL.
+    node-n_image = ICON_WORKPLACE.
+* In case of trees you transfer a handle by using field 'dragdropid':
+    node-dragdropid = handle_tree_set.
+    append node to g_node_table.
+
+  ENDLOOP.
+*** PRUEBA 1
+**  clear node.
+**  node-node_key = 'SET1'.
+**  node-relatkey = 'CELLFUNC'.
+**  node-relatship = cl_gui_simple_tree=>relat_last_child.
+**  node-text = 'silla222'.
+**  node-n_image = ICON_WORKPLACE.
+*** In case of trees you transfer a handle by using field 'dragdropid':
+**  node-dragdropid = handle_tree_set.
+**  append node to g_node_table.
+*** PRUEBA 1
+*  clear node.
+*  node-node_key = 'CLEAR'.
+*  node-relatkey = 'CELLFUNC'.
+*  node-relatship = cl_gui_simple_tree=>relat_last_child.
+*  node-text = 'Clear'(130).
+*  node-n_image = icon_delete.
+*  node-dragdropid = handle_tree_clear.
+*  append node to g_node_table.
+
+* For defining a behaviour on cells you have to fill a table
+* of type LVC_T_DRDR. Since its entries depend on entries of
+* of the output table (i.e., of values in field 'SMOKER'),
+* the handles 'handle_alv_set' and 'handle_alv_clear' are
+* passed after data selection (see form 'BUILD_DATA_AND_ALV_HANDLES').
+
+endform.                               " build_nodes_and_handles
+
+
+*** INCLUDE bcalvc_dnd_03_F01
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_DATA_AND_ALV_HANDLES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form build_data_and_alv_handles.
+* § 4. Define a behaviour for drag and drop on ALV.
+  data: handle_alv_set type i,
+        handle_alv_clear type i,
+        effect type i,
+        ls_celltab type lvc_s_drdr,
+        lt_sbook like standard table of sbook with header line,
+        ls_book like  sbook,
+        l_index_gt_outtab type i.
+*
+* Create one handle to allow the setting of the smoker flag and
+* one handle to allow the clearing of the smoker flag.
+* In this way, the check if the right function is combined with
+* the right cell is handled by the drag and drop control.
+*
+  CREATE OBJECT g_behaviour_alv_set.
+  effect = cl_dragdrop=>copy.
+  CALL METHOD g_behaviour_alv_set->add
+    EXPORTING
+      flavor     = 'set_smoker'
+      dragsrc    = ' '
+      droptarget = 'X'
+      effect     = effect.
+  CALL METHOD g_behaviour_alv_set->get_handle
+    IMPORTING
+      handle = handle_alv_set.
+
+  CREATE OBJECT g_behaviour_alv_clear.
+  effect = cl_dragdrop=>move.
+  CALL METHOD g_behaviour_alv_clear->add
+    EXPORTING
+      flavor     = 'clear_smoker'
+      dragsrc    = ' '
+      droptarget = 'X'
+      effect     = effect.
+  CALL METHOD g_behaviour_alv_clear->get_handle
+    IMPORTING
+      handle = handle_alv_clear.
+
+* § 5. Select data and fill the table for drag and drop behaviour.
+
+* Select data into local table
+*  select * from sbook into table lt_sbook up to g_max rows.  "#EC CI_NOWHERE
+**** INI MOD rgr
+  PERFORM f_rellenar_tabla_alv.
+
+*  ls_book-CARRID = 'LH'.
+*  ls_book-CONNID = '0400'.
+*  ls_book-FLDATE = '19950228'.
+*  ls_book-BOOKID = '00000001'.
+*  ls_book-CUSTOMID = ''.
+*  ls_book-CUSTTYPE = 'B'.
+*  ls_book-SMOKER = ''.
+*  append ls_book to lt_sbook.
+*  ls_book-CARRID = 'LH'.
+*  ls_book-CONNID = '0400'.
+*  ls_book-FLDATE = '19950228'.
+*  ls_book-BOOKID = '00000002'.
+*  ls_book-CUSTOMID = ''.
+*  ls_book-CUSTTYPE = 'P'.
+*  ls_book-SMOKER = ''.
+*  append ls_book to lt_sbook.
+*  ls_book-CARRID = 'LH'.
+*  ls_book-CONNID = '0455'.
+*  ls_book-FLDATE = '20001202'.
+*  ls_book-BOOKID = '00000001'.
+*  ls_book-CUSTOMID = ''.
+*  ls_book-CUSTTYPE = 'B'.
+*  ls_book-SMOKER = ''.
+*  append ls_book to lt_sbook.
+*  ls_book-CARRID = 'SQ'.
+*  ls_book-CONNID = '0026'.
+*  ls_book-FLDATE = '19960610'.
+*  ls_book-BOOKID = '00000001'.
+*  ls_book-CUSTOMID = ''.
+*  ls_book-CUSTTYPE = 'P'.
+*  ls_book-SMOKER = ''.
+*  append ls_book to lt_sbook.
+*
+** move corresponding fields from lt_sbook to gt_outtab
+*  loop at lt_sbook.
+*    move-corresponding lt_sbook to gt_outtab.
+*    append gt_outtab.
+*  endloop.
+
+* Loop at table and define initial drag and drop behaviour on
+* field entries of column 'SMOKER'
+  loop at gt_outtab.
+    l_index_gt_outtab = sy-tabix.
+    clear ls_celltab.
+    ls_celltab-fieldname = 'SORTL'.
+    if gt_outtab-SORTL NE ''.
+      ls_celltab-dragdropid = handle_alv_clear.
+    ELSE.
+      ls_celltab-dragdropid = handle_alv_set.
+*    else.
+*    ls_celltab-dragdropid = handle_alv_set.
+    endif.
+* append description for field of this row to table 'celltab'
+    append ls_celltab to gt_outtab-celltab.
+* modify this row of output table
+    modify gt_outtab index l_index_gt_outtab.
+  endloop.
+
+* § 6. Pass the additional fieldname to ALV using the layout structure.
+  gs_layout-s_dragdrop-fieldname = 'CELLTAB'.
+
+endform.                               " BUILD_DATA_AND_ALV_HANDLES
+*&---------------------------------------------------------------------*
+*&      Form  SET_smoker
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+*form set_smoker.
+*  data: handle_alv_clear type i,
+*        ls_celltab type lvc_s_drdr.
+*
+*  read table gt_outtab index gv_drop_line.
+**** ELECCION DE LA MARCA
+*  gt_outtab-VSTEL = '1'.
+*
+*  CALL METHOD g_behaviour_alv_clear->get_handle
+*    IMPORTING
+*      handle = handle_alv_clear.
+** remark: the handle of 'g_behaviour_alv_clear' is located on the
+**         backend, so no flush is needed to access it.
+*
+** modify appropriate entry in 'celltab'
+*  loop at gt_outtab-celltab into ls_celltab.
+*    if ls_celltab-fieldname eq 'SORTL'.
+** set other handle to describe new behaviour (now only clearing
+** the smoker-flag is allowed!).
+*      ls_celltab-dragdropid = handle_alv_clear.
+*      modify gt_outtab-celltab from ls_celltab.
+*    endif.
+*  endloop.
+** modify output table
+*  modify gt_outtab index gv_drop_line.
+** refresh table on frontend
+*  CALL METHOD g_alv->refresh_table_display.
+*
+*endform.                               " SET_smoker
+*&---------------------------------------------------------------------*
+*&      Form  set_smoker1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*form set_smoker1.
+*  data: handle_alv_clear type i,
+*        ls_celltab type lvc_s_drdr.
+*
+*  read table gt_outtab index gv_drop_line.
+**** ELECCION DE LA MARCA
+*  gt_outtab-VSTEL = '2'.
+*
+*  CALL METHOD g_behaviour_alv_clear->get_handle
+*    IMPORTING
+*      handle = handle_alv_clear.
+** remark: the handle of 'g_behaviour_alv_clear' is located on the
+**         backend, so no flush is needed to access it.
+*
+** modify appropriate entry in 'celltab'
+*  loop at gt_outtab-celltab into ls_celltab.
+*    if ls_celltab-fieldname eq 'SORTL'.
+** set other handle to describe new behaviour (now only clearing
+** the smoker-flag is allowed!).
+*      ls_celltab-dragdropid = handle_alv_clear.
+*      modify gt_outtab-celltab from ls_celltab.
+*    endif.
+*  endloop.
+** modify output table
+*  modify gt_outtab index gv_drop_line.
+** refresh table on frontend
+*  CALL METHOD g_alv->refresh_table_display.
+*
+*endform.                               " SET_smoker
+*&---------------------------------------------------------------------*
+*&      Form  CLEAR_smoker
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+*form clear_smoker.
+*  data: handle_alv_set type i,
+*        ls_celltab type lvc_s_drdr.
+*
+*  read table gt_outtab index gv_drop_line.
+*  gt_outtab-VSTEL = ' '.
+*
+*  CALL METHOD g_behaviour_alv_set->get_handle
+*    IMPORTING
+*      handle = handle_alv_set.
+** remark: the handle of 'g_behaviour_alv_clear' is located on the
+**         backend, so no flush is needed to access it.
+*
+** modify appropriate entry in 'celltab'
+*  loop at gt_outtab-celltab into ls_celltab.
+*    if ls_celltab-fieldname eq 'SORTL'.
+** set other handle to describe new behaviour (now only clearing
+** the smoker-flag is allowed!).
+*      ls_celltab-dragdropid = handle_alv_set.
+*      modify gt_outtab-celltab from ls_celltab.
+*    endif.
+*  endloop.
+** modify output table
+*  modify gt_outtab index gv_drop_line.
+** refresh table on frontend
+*  CALL METHOD g_alv->refresh_table_display.
+*
+*endform.                               " CLEAR_smoker
+*&---------------------------------------------------------------------*
+*&      Module  PBO_0101  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE PBO_0101 OUTPUT.
+  data:ls_book like  sbook,
+  lt_sbook1 type table of sbook.
+  clear ls_book.
+  clear lt_sbook1. refresh lt_sbook1.
+
+  ls_book-CARRID = 'LH'.
+  ls_book-CONNID = '0400'.
+  ls_book-FLDATE = '19950228'.
+  ls_book-BOOKID = '00000001'.
+  ls_book-CUSTOMID = ''.
+  ls_book-CUSTTYPE = 'B'.
+  ls_book-SMOKER = ''.
+  append ls_book to lt_sbook1.
+  ls_book-CARRID = 'LH'.
+  ls_book-CONNID = '0400'.
+  ls_book-FLDATE = '19950228'.
+  ls_book-BOOKID = '00000002'.
+  ls_book-CUSTOMID = ''.
+  ls_book-CUSTTYPE = 'P'.
+  ls_book-SMOKER = ''.
+  append ls_book to lt_sbook1.
+  ls_book-CARRID = 'LH'.
+  ls_book-CONNID = '0455'.
+  ls_book-FLDATE = '20001202'.
+  ls_book-BOOKID = '00000001'.
+  ls_book-CUSTOMID = ''.
+  ls_book-CUSTTYPE = 'B'.
+  ls_book-SMOKER = ''.
+  append ls_book to lt_sbook1.
+  ls_book-CARRID = 'SQ'.
+  ls_book-CONNID = '0026'.
+  ls_book-FLDATE = '19960610'.
+  ls_book-BOOKID = '00000001'.
+  ls_book-CUSTOMID = ''.
+  ls_book-CUSTTYPE = 'P'.
+  ls_book-SMOKER = ''.
+  append ls_book to lt_sbook1.
+
+  if custom_container2 is initial.
+* (the data from sbook is already selected)
+
+* create a custom container control for our ALV Control
+    CREATE OBJECT custom_container2
+      EXPORTING
+        container_name              = cont_on_dialog
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5.
+    if sy-subrc ne 0.
+* add your handling, for example
+      CALL FUNCTION 'POPUP_TO_INFORM'
+        EXPORTING
+          titel = gv_repid
+          txt2  = sy-subrc
+          txt1  = 'The control could not be created'(510).
+    endif.
+* create an instance of alv control
+    CREATE OBJECT grid2
+      EXPORTING
+        i_parent = custom_container2.
+*
+* change title
+*
+    gs_layout-grid_title = 'Bookings'(101).
+    perform mask_columns tables gt_fieldcat.
+
+
+
+    CALL METHOD grid2->set_table_for_first_display
+      EXPORTING
+        is_layout       = gs_layout
+      CHANGING
+        it_fieldcatalog = gt_fieldcat[]
+        it_outtab       = lt_sbook1.
+
+
+
+    CALL METHOD cl_gui_control=>set_focus
+      EXPORTING
+        control = grid2.
+    CALL METHOD cl_gui_cfw=>flush.
+    if sy-subrc ne 0.
+* add your handling, for example
+      CALL FUNCTION 'POPUP_TO_INFORM'
+        EXPORTING
+          titel = gv_repid
+          txt2  = sy-subrc
+          txt1  = 'Error in FLush'(500).
+    endif.
+  ENDIF.
+ENDMODULE.                 " PBO_0101  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  PAI_0101  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE PAI_0101 INPUT.
+  case sy-ucomm.
+    when 'RETURN'.
+      leave to screen 0.
+
+  endcase.
+  clear sy-ucomm.
+ENDMODULE.                 " PAI_0101  INPUT
+*&---------------------------------------------------------------------*
+*&      Form  MASK_COLUMNS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_FIELDCAT  text
+*----------------------------------------------------------------------*
+form mask_columns tables p_gt_fieldcat type lvc_t_fcat.
+
+
+* Build the fieldcat according to DDIC structure SBOOK:
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_structure_name = 'SBOOK'
+    CHANGING
+      ct_fieldcat      = p_gt_fieldcat[].
+
+* suppress key fields CARRID, CONNID and FLDATE
+*  loop at p_gt_fieldcat.
+*    if p_gt_fieldcat-fieldname = 'CARRID'
+*     or p_gt_fieldcat-fieldname = 'CONNID'
+*     or p_gt_fieldcat-fieldname = 'FLDATE'.
+*      p_gt_fieldcat-key_sel = 'X'.
+*      p_gt_fieldcat-no_out = 'X'.
+*      modify p_gt_fieldcat.
+** set left alignment for the two key fields left...
+*    elseif p_gt_fieldcat-fieldname = 'BOOKID'
+*          or p_gt_fieldcat-fieldname = 'CUSTOMID'.
+*      p_gt_fieldcat-just = 'L'.
+*      modify p_gt_fieldcat.
+*    endif.
+*  endloop.
+
+endform.                               " MASK_COLUMNS
+*&---------------------------------------------------------------------*
+*&      Form  F_CONSEGUIR_NODOS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_CONSEGUIR_NODOS .
+
+*  SELECT * FROM HRP1000
+*    INTO TABLE GT_HRP1000
+*    WHERE PLVAR in so_plvar
+*      AND OTYPE in so_OTYPE.
+*  IF SY-SUBRC EQ 0.
+*    DESCRIBE TABLE GT_HRP1000 LINES GV_NLHRP1000.
+*  ENDIF.
+  SELECT * FROM KNA1
+    INTO CORRESPONDING FIELDS OF TABLE GT_KNA1
+    WHERE kunnr in so_kunnr
+      and KTOKD EQ gc_z001
+      and loevm eq ''.
+  IF SY-SUBRC EQ 0.
+    DESCRIBE TABLE GT_KNA1 LINES GV_NLKNA1.
+  ENDIF.
+ENDFORM.                    " F_CONSEGUIR_NODOS
+*&---------------------------------------------------------------------*
+*&      Form  F_SET_SMOKER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_NODO  text
+*----------------------------------------------------------------------*
+FORM F_SET_SMOKER  USING    P_LV_NODO.
+  data: handle_alv_clear type i,
+        handle_alv_set type i,
+        ls_celltab type lvc_s_drdr.
+  DATA: BEGIN OF lt_outtab_aux OCCURS 0.
+          INCLUDE STRUCTURE ZESD_0103.
+  DATA:
+        celltab TYPE lvc_t_drdr.
+  DATA: END OF lt_outtab_aux.
+*types: BEGIN OF tys_outtab,
+*        INCLUDE type ZESD_0103,
+*        celltab TYPE lvc_t_drdr,
+*       END OF tys_outtab.
+*data: ls_outtab type tys_outtab.
+  data: it_rows type LVC_T_ROW.
+  data: ls_rows type LVC_S_ROW.
+  data: it_rows_add type LVC_T_ROW.
+  data: ls_rows_add type LVC_S_ROW.
+
+  CALL METHOD g_alv->get_selected_rows
+    IMPORTING
+      et_index_rows = it_rows.
+
+  lt_outtab_aux[] = gt_outtab[].
+  if it_rows[] is initial.
+    ls_rows-index = gv_drop_line.
+    append ls_rows to it_rows.
+  endif.
+
+
+*** meter la mesa en todas las posiciones de la entrega
+  loop at it_rows into ls_rows.
+    gv_drop_line = ls_rows-index.
+    read table gt_outtab index gv_drop_line.
+    loop at lt_outtab_aux where vbeln = gt_outtab-vbeln.
+      ls_rows_add-index = sy-tabix.
+      append ls_rows_add to it_rows_add.
+    endloop.
+  endloop.
+
+  it_rows[] = it_rows_add[].
+*** meter la mesa en todas las posiciones de la entrega
+
+  loop at it_rows into ls_rows.
+    gv_drop_line = ls_rows-index.
+    read table gt_outtab index gv_drop_line.
+
+
+*** ELECCION DE LA MARCA
+*    CONDENSE P_LV_NODO NO-GAPS.
+*  loop at gt_outtab WHERE vbeln = gt_outtab-vbeln.
+    gt_outtab-SORTL = P_LV_NODO.
+
+    CALL METHOD g_behaviour_alv_clear->get_handle
+      IMPORTING
+        handle = handle_alv_clear.
+    CALL METHOD g_behaviour_alv_set->get_handle
+      IMPORTING
+        handle = handle_alv_set.
+* remark: the handle of 'g_behaviour_alv_clear' is located on the
+*         backend, so no flush is needed to access it.
+
+* modify appropriate entry in 'celltab'
+    loop at gt_outtab-celltab into ls_celltab.
+      if ls_celltab-fieldname eq 'SORTL'.
+        if P_LV_NODO is initial.
+          ls_celltab-dragdropid = handle_alv_set.
+        else.
+          ls_celltab-dragdropid = handle_alv_clear.
+        endif.
+        modify gt_outtab-celltab from ls_celltab.
+      endif.
+    endloop.
+* modify output table
+
+    modify gt_outtab index gv_drop_line.
+
+*    endloop.
+** refresh table on frontend
+*    CALL METHOD g_alv->refresh_table_display.
+  endloop.
+* refresh table on frontend
+    CALL METHOD g_alv->refresh_table_display.
+
+ENDFORM.                    " F_SET_SMOKER
+*&---------------------------------------------------------------------*
+*&      Form  F_RELLENAR_TABLA_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_rellenar_tabla_alv .
+  TYPES: BEGIN OF tys_matnr,
+          matnr type matnr,
+          maktx type maktx,
+     END OF tys_matnr.
+  TYPES: BEGIN OF tys_vbak,
+          Vbeln type VBELN_VA,
+          BSTNK TYPE BSTNK,
+     END OF tys_vbak.
+  data: lt_matnr type table of tys_matnr,
+        ls_matnr type tys_matnr.
+  data: lt_vbak type table of tys_vbak,
+        ls_vbak type tys_vbak.
+  data: lv_vbelnant type vbeln_va,
+        lv_kodat type kodat.
+* refresh gt_outtab. clear gt_outtab.
+  select * into corresponding fields of table gt_outtab
+    from likp as a
+    INNER JOIN vbuk as b on
+    a~vbeln = b~vbeln
+*    INNER JOIN ZTSD_0050 as c on
+*    a~vbeln = c~vbeln
+    where a~vbeln in so_vbeln
+      and a~vstel in so_vstel
+      and a~kodat in so_kodat
+      and a~lfart in so_lfart
+      and ( b~kostk eq gc_a or
+          b~kostk eq gc_b )
+      and b~wbstk ne gc_c.
+  if sy-subrc eq 0.
+    loop at gt_outtab into gs_outtab.
+      move gs_outtab-vbeln to gs_vbpavbeln-vbeln.
+      append gs_vbpavbeln to gt_vbpavbeln.
+    endloop.
+    select vbeln kunnr into table gt_vbpa
+      from vbpa
+      for all ENTRIES IN gt_vbpavbeln
+      where vbeln = gt_vbpavbeln-vbeln
+        AND parvw = GC_Y1.
+    if sy-subrc eq 0.
+    endif.
+
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_outtab
+      FROM LIPS as a
+      INNER JOIN ZTSD_0050 as c on
+      a~vbeln = c~vbeln
+      for all ENTRIES IN gt_vbpavbeln
+        where a~vbeln = gt_vbpavbeln-vbeln.
+
+    if gt_outtab[] is not initial.
+      sort gt_outtab by vbeln posnr.
+    endif.
+    clear lv_vbelnant.
+    clear lv_kodat.
+    loop at gt_outtab into gs_outtab.
+      if gs_outtab-vbeln eq lv_vbelnant.
+      gs_outtab-kodat = lv_kodat.
+      modify gt_outtab from gs_outtab.
+      endif.
+      if gs_outtab-posnr is initial.
+        move gs_outtab-vbeln to lv_vbelnant.
+        move gs_outtab-kodat to lv_kodat.
+*       DELETE TABLE ITAB FROM WA_ITAB.
+        delete TABLE gt_outtab from gs_outtab.
+        continue.
+      endif.
+
+      move gs_outtab-matnr to ls_matnr-matnr.
+      append ls_matnr to lt_matnr.
+      if gs_outtab-vgbel is not initial.
+        move gs_outtab-vgbel to ls_vbak-vbeln.
+        append ls_vbak to lt_vbak.
+      endif.
+      read table gt_vbpa into gs_vbpa with key vbeln = gs_outtab-vbeln.
+      if sy-subrc eq 0.
+        read table gt_kna1 into gs_kna1 with key kunnr = gs_vbpa-kunnr.
+        if sy-subrc eq 0.
+          gs_outtab-sortl = gs_kna1-sortl.
+          modify gt_outtab from gs_outtab.
+        endif.
+      endif.
+    endloop.
+    sort lt_matnr by matnr.
+    delete ADJACENT DUPLICATES FROM lt_matnr.
+    select matnr maktx from MAKT
+      into TABLE lt_matnr
+      FOR ALL ENTRIES IN lt_matnr
+      where matnr = lt_matnr-matnr
+        AND spras = sy-langu.
+    if sy-subrc eq 0.
+    endif.
+    sort lt_vbak by vbeln.
+    delete adjacent duplicates from lt_vbak.
+    select vbeln BSTNK from vbak
+      into table lt_vbak
+      for all entries in lt_vbak
+      where vbeln = lt_vbak-vbeln.
+    if sy-subrc eq 0.
+    endif.
+    loop at gt_outtab into gs_outtab.
+      read table lt_matnr into ls_matnr with key matnr = gs_outtab-matnr.
+      if sy-subrc eq 0.
+        gs_outtab-maktx = ls_matnr-maktx.
+        modify gt_outtab from gs_outtab.
+        clear ls_matnr.
+      endif.
+      read table lt_vbak into ls_vbak with key vbeln = gs_outtab-vgbel.
+      if sy-subrc eq 0.
+        gs_outtab-bstnk = ls_vbak-bstnk.
+        modify gt_outtab from gs_outtab.
+        clear ls_vbak.
+      endif.
+    endloop.
+*    endif.
+  endif.
+ENDFORM.                    " F_RELLENAR_TABLA_ALV
+*&---------------------------------------------------------------------*
+*&      Form  F_BORRAR_MESA_LINES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_BORRAR_MESA_LINES .
+*data: handle_alv_clear type i,
+*        ls_celltab type lvc_s_drdr.
+*data: it_rows type LVC_T_ROW.
+*data: ls_rows type LVC_S_ROW.
+*DATA: BEGIN OF lt_outtab_aux OCCURS 0.
+*        INCLUDE STRUCTURE ZESD_0103.
+*DATA:
+*      celltab TYPE lvc_t_drdr.
+*DATA: END OF lt_outtab_aux.
+*
+*CALL METHOD g_alv->get_selected_rows
+*    IMPORTING
+*      et_index_rows = it_rows.
+* lt_outtab_aux[] = gt_outtab[].
+*  if it_rows[] is initial.
+*    ls_rows-index = gv_drop_line.
+*    append ls_rows to it_rows.
+*  endif.
+*
+*
+**** meter la mesa en todas las posiciones de la entrega
+*  loop at it_rows into ls_rows.
+*    gv_drop_line = ls_rows-index.
+*    read table gt_outtab index gv_drop_line.
+*    loop at lt_outtab_aux where vbeln = gt_outtab-vbeln.
+*    ls_rows_add-index = sy-tabix.
+*    append ls_rows_add to it_rows_add.
+*    endloop.
+*  endloop.
+*
+*  it_rows[] = it_rows_add[].
+
+ENDFORM.                    " F_BORRAR_MESA_LINES
+*&---------------------------------------------------------------------*
+*&      Form  F_ACTUALIZAR_MESA_FM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_ACTUALIZAR_MESA_FM .
+
+  DATA: BEGIN OF lt_outtab_aux OCCURS 0.
+          INCLUDE STRUCTURE ZESD_0103.
+  DATA:
+        celltab TYPE lvc_t_drdr.
+  DATA: END OF lt_outtab_aux.
+  data: ls_outtab_aux like LINE OF lt_outtab_aux.
+
+  data: lt_partner_update type table of shp_partner_update,
+        ls_partner_update type shp_partner_update,
+        lt_vbkok type table of vbkok,
+        ls_vbkok type vbkok.
+  data: lv_delivery type likp-vbeln,
+        lv_flag TYPE c VALUE space,
+        lv_ef_error_in_item_deletion TYPE xfeld,
+        lv_ef_error_in_pod_update    TYPE xfeld.
+  data: lt_prot  TYPE STANDARD TABLE OF prott, " Protocolo notificación picking
+        ls_prot  TYPE prott. " Protocolo notificación picking
+  data: lv_flagi.
+*  BREAK-POINT.
+  CLEAR gt_return. REFRESH GT_RETURN.
+  clear gs_return. clear ls_vbkok.
+  clear lt_outtab_aux. refresh lt_outtab_aux.
+
+
+  clear gt_vbpa. refresh gt_vbpa.
+
+  select vbeln kunnr into table gt_vbpa
+      from vbpa
+      for all entries in gt_vbpavbeln
+      where vbeln = gt_vbpavbeln-vbeln
+        and parvw = gc_y1.
+  if sy-subrc eq 0.
+  endif.
+
+  lt_outtab_aux[] = gt_outtab[].
+  delete adjacent duplicates from lt_outtab_aux comparing vbeln.
+
+  loop at lt_outtab_aux into ls_outtab_aux.
+    read table gt_vbpa into gs_vbpa with key vbeln = ls_outtab_aux-vbeln.
+    if sy-subrc eq 0.
+*      if gs_vbpa-kunnr is initial.
+      read table gt_kna1 into gs_kna1 with key  sortl = ls_outtab_aux-sortl." binary search.
+      if sy-subrc eq 0 and ls_outtab_aux-sortl is not initial.
+        if gs_vbpa-kunnr eq gs_kna1-kunnr.
+          continue.
+        endif.
+      endif.
+    else.
+      if ls_outtab_aux-sortl is initial.
+        continue.
+      endif.
+    endif.
+    clear lv_flagi.
+    ls_vbkok-vbeln_vl = ls_outtab_aux-vbeln.
+    ls_partner_update-vbeln_vl = ls_outtab_aux-vbeln.
+    ls_partner_update-parvw = gc_y1.
+
+
+*    ls_partner_update-name1 = ls_outtab_aux-sortl.
+*    ls_partner_update-land1 = gc_ar.
+*    ls_partner_update-ort01 = '.'.
+*    ls_partner_update-spras =  gc_es.
+*    ls_partner_update-updkz_adr =  gc_x.
+
+    read table gt_kna1 into gs_kna1 with key  sortl = ls_outtab_aux-sortl." binary search.
+    if sy-subrc eq 0 and ls_outtab_aux-sortl is not initial.
+      ls_partner_update-parnr = gs_kna1-kunnr.
+    endif.
+    if ls_outtab_aux-sortl is initial.
+*      clear ls_partner_update-parnr.
+*      clear ls_partner_update-land1.
+*      clear ls_partner_update-ort01.
+*      clear ls_partner_update-spras.
+*      clear ls_partner_update-updkz_adr.
+      perform f_actualiza_insercion_vacio using ls_outtab_aux-vbeln
+                                            gs_kna1-kunnr
+                                      changing lv_flagi
+                                        ls_partner_update-parnr.
+    else.
+      perform f_actualiza_insercion using ls_outtab_aux-vbeln
+                                          gs_kna1-kunnr
+                                    changing lv_flagi.
+    endif.
+    if lv_flagi eq gc_x.
+      continue.
+    endif.
+    ls_partner_update-updkz_par =  lv_flagi.
+    append ls_partner_update to lt_partner_update.
+
+    CALL FUNCTION 'WS_DELIVERY_UPDATE'
+      EXPORTING
+        vbkok_wa                 = ls_vbkok
+        commit                   = gc_x
+        delivery                 = ls_vbkok-vbeln_vl
+        if_error_messages_send_0 = gc_vacio
+        it_partner_update        = lt_partner_update
+      TABLES
+*       vbpok_tab                =
+        prot                     = lt_prot.
+
+    clear lv_flag.
+    clear lt_partner_update.refresh lt_partner_update.
+    clear ls_partner_update.
+    LOOP AT lt_prot INTO ls_prot.
+*** Almacenar el error y salimos del LOOP
+      IF ls_prot-msgty = 'A' OR ls_prot-msgty = 'E'.
+        CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+          EXPORTING
+            msgid               = ls_prot-msgid
+            msgnr               = ls_prot-msgno
+            msgv1               = ls_prot-msgv1
+            msgv2               = ls_prot-msgv2
+            msgv3               = ls_prot-msgv3
+            msgv4               = ls_prot-msgv4
+          IMPORTING
+            message_text_output = gs_return-message.
+*        MOVE gs_return-message_v1 TO GS_RETURN-MESSAGE.
+*      gv_error             = 'X'.
+        gs_return-type       = 'E'.
+        gs_return-number     = ls_prot-msgno.
+        gs_return-id         = ls_prot-msgid.
+        APPEND gs_return TO gt_return.
+      endif.
+    endloop.
+*    endif.
+  endloop.
+
+  if gt_return is not initial.
+    MESSAGE id 'ZSD_0002' type gc_s number '000' with text-e01 display like gc_e.
+  else.
+    MESSAGE id 'ZSD_0002' type gc_s number '000' with text-i01 display like gc_s.
+  endif.
+ENDFORM.                    " F_ACTUALIZAR_MESA_FM
+*&---------------------------------------------------------------------*
+*&      Form  F_REVISAR_ERRORES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_REVISAR_ERRORES .
+
+
+  if gt_return is initial.
+    MOVE gc_s TO gs_return-type.
+*    MOVE sy-msgid TO gs_return-id.
+*    MOVE sy-msgno TO gs_return-number.
+    move text-e02 to gs_return-message.
+    APPEND gs_return TO gt_return.
+*  MESSAGE ID 'ZSD_0002' TYPE GC_S NUMBER '000' WITH text-E02 DISPLAY LIKE gc_s.
+*else.
+  endif.
+*  CALL FUNCTION 'C14Z_MESSAGES_SHOW_AS_POPUP'
+**   EXPORTING
+**     I_MSGID             =
+**     I_MSGTY             =
+**     I_MSGNO             =
+**     I_MSGV1             =
+**     I_MSGV2             =
+**     I_MSGV3             =
+**     I_MSGV4             =
+**     I_LINENO            =
+*   TABLES
+*     I_MESSAGE_TAB       = gt_return.
+  CALL FUNCTION 'RSCRMBW_DISPLAY_BAPIRET2'
+    TABLES
+      IT_RETURN = gt_return.
+
+
+
+*endif.
+ENDFORM.                    " F_REVISAR_ERRORES
+*&---------------------------------------------------------------------*
+*&      Form  F_ACTUALIZA_INSERCION
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GS_KNA1_AUX_KUNNR  text
+*      <--P_LV_GLAFI  text
+*----------------------------------------------------------------------*
+FORM F_ACTUALIZA_INSERCION  USING    lv_vbeln_alv
+                                     lv_kunnr_alv
+                            CHANGING P_LV_GLAFI.
+
+  data: lv_kunnr_bd type kunnr.
+
+  read table gt_vbpa into gs_vbpa with key vbeln = lv_vbeln_alv.
+  if sy-subrc eq 0."
+    move gs_vbpa-kunnr to lv_kunnr_bd.
+
+    if lv_kunnr_bd is initial."no hay valor en la base de datos
+      if lv_kunnr_alv is not initial."hay valor en el ALV
+        P_LV_GLAFI = gc_i.
+      else.
+        P_LV_GLAFI = gc_u.
+      endif.
+    else." hay valor en la base de datos
+      if lv_kunnr_alv is initial."queremos borrar el valor
+        P_LV_GLAFI = gc_d.
+      else.
+        P_LV_GLAFI = gc_u.
+      endif.
+    endif.
+  else.
+    P_LV_GLAFI = gc_i.
+  endif.
+ENDFORM.                    " F_ACTUALIZA_INSERCION
+*&---------------------------------------------------------------------*
+*&      Form  F_ACTUALIZA_INSERCION_VACIO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LS_OUTTAB_AUX_VBELN  text
+*      -->P_GS_KNA1_AUX_KUNNR  text
+*      <--P_LV_FLAGI  text
+*----------------------------------------------------------------------*
+FORM F_ACTUALIZA_INSERCION_VACIO  USING    lv_vbeln_alv
+                                           lv_kunnr_alv
+                                  CHANGING P_LV_FLAGI
+                                           p_ls_partner_update-PARNR.
+
+  data: lv_kunnr_bd type kunnr.
+
+  read table gt_vbpa into gs_vbpa with key vbeln = lv_vbeln_alv.
+  if sy-subrc eq 0."
+
+    move gs_vbpa-kunnr to lv_kunnr_bd.
+    p_ls_partner_update-PARNR = gs_vbpa-kunnr.
+    if lv_kunnr_bd is initial."no hay valor en la base de datos
+      P_LV_flagi = gc_x.
+
+    else.
+      P_LV_flagi = gc_d.
+    endif.
+  else.
+    P_LV_flagi = gc_x.
+  endif.
+ENDFORM.                    " F_ACTUALIZA_INSERCION_VACIO
+*&---------------------------------------------------------------------*
+*&      Form  F_HANDLE_DOUBLE_CLICK
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_E_ROW  text
+*      -->P_E_COLUMN  text
+*      -->P_ES_ROW_NO  text
+*----------------------------------------------------------------------*
+FORM F_HANDLE_DOUBLE_CLICK  USING  P_ES_ROW_NO.
+  DATA: LV_ROID TYPE LVC_S_ROID.
+
+  MOVE P_ES_ROW_NO TO LV_ROID.
+
+  READ TABLE gt_outtab INTO gs_outtab  INDEX LV_ROID-ROW_ID.
+  IF sy-subrc = 0 AND gs_outtab-vbeln is not initial.
+    SET PARAMETER ID 'VL' FIELD gs_outtab-vbeln.
+    CALL TRANSACTION 'VL03N' AND SKIP FIRST SCREEN.
+  endif.
+
+ENDFORM.                    " F_HANDLE_DOUBLE_CLICK
+*&---------------------------------------------------------------------*
+*&      Form  F4_FOR_VARIANT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F4_FOR_VARIANT .
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      IS_VARIANT          = Gv_VARIANT
+      I_SAVE              = Gv_SAVE
+*     it_default_fieldcat =
+    IMPORTING
+      E_EXIT              = Gv_EXIT
+      ES_VARIANT          = GX_VARIANT
+    EXCEPTIONS
+      NOT_FOUND           = 2.
+  IF SY-SUBRC = 2.
+    MESSAGE ID SY-MSGID TYPE 'S'      NUMBER SY-MSGNO
+            WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ELSE.
+    IF Gv_EXIT = SPACE.
+      Pa_VARI = GX_VARIANT-VARIANT.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    " F4_FOR_VARIANT
+*&---------------------------------------------------------------------*
+*&      Form  F_VARIANT_INIT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_VARIANT_INIT .
+  CLEAR Gv_VARIANT.
+  Gv_VARIANT-REPORT = Gv_REPID.
+ENDFORM.                    " F_VARIANT_INIT
+*&---------------------------------------------------------------------*
+*&      Form  F_PAI_OF_SELECTION_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_PAI_OF_SELECTION_SCREEN .
+  IF NOT Pa_VARI IS INITIAL.
+    MOVE Gv_VARIANT TO GX_VARIANT.
+    MOVE Pa_VARI TO GX_VARIANT-VARIANT.
+    CALL FUNCTION 'REUSE_ALV_VARIANT_EXISTENCE'
+      EXPORTING
+        I_SAVE     = Gv_SAVE
+      CHANGING
+        CS_VARIANT = GX_VARIANT.
+    Gv_VARIANT = GX_VARIANT.
+  ELSE.
+    PERFORM f_VARIANT_INIT.
+  ENDIF.
+ENDFORM.                    " F_PAI_OF_SELECTION_SCREEN
+*&---------------------------------------------------------------------*
+*&      Form  F_ACTUALIZAR_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_ACTUALIZAR_ALV .
+
+  perform build_data_and_alv_handles.
+
+*  PERFORM f_rellenar_tabla_alv.
+
+* refresh table on frontend
+  CALL METHOD g_alv->refresh_table_display.
+
+ENDFORM.                    " F_ACTUALIZAR_ALV

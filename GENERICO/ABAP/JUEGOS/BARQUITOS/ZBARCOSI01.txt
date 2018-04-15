@@ -1,0 +1,63 @@
+
+*----------------------------------------------------------------------*
+*   INCLUDE ZMAN_PERFILESI01                                           *
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  exit  INPUT
+*&---------------------------------------------------------------------*
+*      LLamadas de códigos de función de tipo 'E'.
+*----------------------------------------------------------------------*
+*
+module EXIT input.
+*
+  CASE okcode.
+    WHEN 'FINALIZAR' OR 'F_ATRAS'.
+*   Hay que borrar las tablas para los contrincantes y tablas, etc...
+*
+      PERFORM BORRAR_PARTIDA.
+      LEAVE TO TRANSACTION 'SESSION_MANAGER'.
+    WHEN 'CANCEL' OR 'F_CANCEL'.
+      PERFORM BORRAR_PARTIDA.
+      LEAVE TO TRANSACTION 'SESSION_MANAGER'.
+    WHEN 'BACK' OR 'F_VOLVER'.
+      PERFORM BORRAR_PARTIDA.
+      LEAVE TO TRANSACTION 'ZBARCOS'.
+    WHEN OTHERS.
+  ENDCASE.
+*
+ENDMODULE.                 " EXIT  INPUT
+*
+*&---------------------------------------------------------------------*
+*&      Module  user_command_9000  INPUT
+*&---------------------------------------------------------------------*
+*       Tratamiento de las funciones en la pantalla 9000.
+*----------------------------------------------------------------------*
+module user_command_9000 input.
+*
+CASE OKCODE.
+  WHEN 'CS'.                 " Doble click en mapas o refresh
+    PERFORM DIBUJAR_POSICION.
+    PERFORM VALIDAR_BARCOS2.  " VER LOS BARCOS HUNDIDOS.
+  WHEN 'F_GRABAR'.
+    PERFORM VALIDAR_DATOS.
+    IF ERROR IS INITIAL.
+      PERFORM VALIDAR_BARCOS.
+      PERFORM GRABAR_DATOS.
+    ENDIF.
+  WHEN 'F_BORRAR'.
+    PERFORM BORRAR_BARCOS.
+  WHEN 'F_TER_PAR'.
+    PERFORM BORRAR_PARTIDA.
+  WHEN 'F_MEN'.
+    PERFORM MANDAR_MENSAJE.
+  WHEN 'F_REFRE'.
+    PERFORM REFRESCAR_PANTALLA.
+  WHEN 'F_AYUDA'.
+    PERFORM AYUDA_JUEGO.
+  WHEN OTHERS.
+    PERFORM VALIDAR_DATOS.
+ ENDCASE.
+*
+ CLEAR OKCODE.
+*
+endmodule.                 " user_command_9000  INPUT

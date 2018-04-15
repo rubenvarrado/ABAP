@@ -1,0 +1,652 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZMMIGN_0010_F01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+module status_0100 output.
+  SET PF-STATUS 'STATUS_100'.
+  SET TITLEBAR 'STATUS_100'.
+
+endmodule.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+module user_command_0100 input.
+  move sy-ucomm to gv_ok_code.
+  case gv_ok_code.
+*    when 'BACK' .
+*      LEAVE TO SCREEN '0100'.
+    when 'BACK' OR 'EXIT'.
+      clear gs_alv.clear gt_alv. refresh gt_alv.
+*      CLEAR gt_sernr.
+      LEAVE PROGRAM.
+    when 'VERIFICAR'.
+      clear gv_err.
+      perform f_verificar_entrega.
+      if gv_err is initial.
+      perform f_verificar_series.
+      CALL SCREEN '0200'.
+      endif.
+    when 'BORRAR'.
+      clear gt_sernr.refresh gt_sernr.
+  endcase.
+endmodule.
+
+*&SPWIZARD: DECLARATION OF TABLECONTROL 'TC_SERNR' ITSELF
+CONTROLS: TC_SERNR TYPE TABLEVIEW USING SCREEN 0100.
+
+*&SPWIZARD: LINES OF TABLECONTROL 'TC_SERNR'
+DATA:     G_TC_SERNR_LINES  LIKE SY-LOOPC.
+
+DATA:     OK_CODE LIKE SY-UCOMM.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'TC_SERNR'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: UPDATE LINES FOR EQUIVALENT SCROLLBAR
+MODULE TC_SERNR_CHANGE_TC_ATTR OUTPUT.
+*  DESCRIBE TABLE GT_SERNR LINES TC_SERNR-lines.
+  MOVE '10000' TO TC_SERNR-lines.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'TC_SERNR'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: GET LINES OF TABLECONTROL
+MODULE TC_SERNR_GET_LINES OUTPUT.
+  G_TC_SERNR_LINES = SY-LOOPC.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'TC_SERNR'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MODIFY TABLE
+MODULE TC_SERNR_MODIFY INPUT.
+  MODIFY GT_SERNR
+    FROM GS_SERNR
+    INDEX TC_SERNR-CURRENT_LINE.
+
+  CALL FUNCTION 'CONVERSION_EXIT_GERNR_INPUT'
+    EXPORTING
+      INPUT  = GS_SERNR
+    IMPORTING
+      OUTPUT = GS_SERNR.
+
+  APPEND GS_SERNR TO GT_SERNR.
+  SORT GT_SERNR BY SERNR.
+  DELETE ADJACENT DUPLICATES FROM GT_SERNR COMPARING SERNR.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'TC_SERNR'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE TC_SERNR_USER_COMMAND INPUT.
+  OK_CODE = SY-UCOMM.
+  PERFORM USER_OK_TC USING    'TC_SERNR'
+                              'GT_SERNR'
+                              ' '
+                     CHANGING OK_CODE.
+  SY-UCOMM = OK_CODE.
+ENDMODULE.
+
+*----------------------------------------------------------------------*
+*   INCLUDE TABLECONTROL_FORMS                                         *
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  USER_OK_TC                                               *
+*&---------------------------------------------------------------------*
+FORM USER_OK_TC USING    P_TC_NAME TYPE DYNFNAM
+                         P_TABLE_NAME
+                         P_MARK_NAME
+                CHANGING P_OK      LIKE SY-UCOMM.
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA: L_OK              TYPE SY-UCOMM,
+        L_OFFSET          TYPE I.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+*&SPWIZARD: Table control specific operations                          *
+*&SPWIZARD: evaluate TC name and operations                            *
+  SEARCH P_OK FOR P_TC_NAME.
+  IF SY-SUBRC <> 0.
+    EXIT.
+  ENDIF.
+  L_OFFSET = STRLEN( P_TC_NAME ) + 1.
+  L_OK = P_OK+L_OFFSET.
+*&SPWIZARD: execute general and TC specific operations                 *
+  CASE L_OK.
+    WHEN 'INSR'.                      "insert row
+      PERFORM FCODE_INSERT_ROW USING    P_TC_NAME
+                                        P_TABLE_NAME.
+      CLEAR P_OK.
+
+    WHEN 'DELE'.                      "delete row
+      PERFORM FCODE_DELETE_ROW USING    P_TC_NAME
+                                        P_TABLE_NAME
+                                        P_MARK_NAME.
+      CLEAR P_OK.
+
+    WHEN 'P--' OR                     "top of list
+         'P-'  OR                     "previous page
+         'P+'  OR                     "next page
+         'P++'.                       "bottom of list
+      PERFORM COMPUTE_SCROLLING_IN_TC USING P_TC_NAME
+                                            L_OK.
+      CLEAR P_OK.
+*     WHEN 'L--'.                       "total left
+*       PERFORM FCODE_TOTAL_LEFT USING P_TC_NAME.
+*
+*     WHEN 'L-'.                        "column left
+*       PERFORM FCODE_COLUMN_LEFT USING P_TC_NAME.
+*
+*     WHEN 'R+'.                        "column right
+*       PERFORM FCODE_COLUMN_RIGHT USING P_TC_NAME.
+*
+*     WHEN 'R++'.                       "total right
+*       PERFORM FCODE_TOTAL_RIGHT USING P_TC_NAME.
+*
+    WHEN 'MARK'.                      "mark all filled lines
+      PERFORM FCODE_TC_MARK_LINES USING P_TC_NAME
+                                        P_TABLE_NAME
+                                        P_MARK_NAME   .
+      CLEAR P_OK.
+
+    WHEN 'DMRK'.                      "demark all filled lines
+      PERFORM FCODE_TC_DEMARK_LINES USING P_TC_NAME
+                                          P_TABLE_NAME
+                                          P_MARK_NAME .
+      CLEAR P_OK.
+
+*     WHEN 'SASCEND'   OR
+*          'SDESCEND'.                  "sort column
+*       PERFORM FCODE_SORT_TC USING P_TC_NAME
+*                                   l_ok.
+
+  ENDCASE.
+
+ENDFORM.                              " USER_OK_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_INSERT_ROW                                         *
+*&---------------------------------------------------------------------*
+FORM fcode_insert_row
+              USING    P_TC_NAME           TYPE DYNFNAM
+                       P_TABLE_NAME             .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA L_LINES_NAME       LIKE FELD-NAME.
+  DATA L_SELLINE          LIKE SY-STEPL.
+  DATA L_LASTLINE         TYPE I.
+  DATA L_LINE             TYPE I.
+  DATA L_TABLE_NAME       LIKE FELD-NAME.
+  FIELD-SYMBOLS <TC>                 TYPE CXTAB_CONTROL.
+  FIELD-SYMBOLS <TABLE>              TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <LINES>              TYPE I.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (P_TC_NAME) TO <TC>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE P_TABLE_NAME '[]' INTO L_TABLE_NAME. "table body
+  ASSIGN (L_TABLE_NAME) TO <TABLE>.                "not headerline
+
+*&SPWIZARD: get looplines of TableControl                              *
+  CONCATENATE 'G_' P_TC_NAME '_LINES' INTO L_LINES_NAME.
+  ASSIGN (L_LINES_NAME) TO <LINES>.
+
+*&SPWIZARD: get current line                                           *
+  GET CURSOR LINE L_SELLINE.
+  IF SY-SUBRC <> 0.                   " append line to table
+    L_SELLINE = <TC>-LINES + 1.
+*&SPWIZARD: set top line                                               *
+    IF L_SELLINE > <LINES>.
+      <TC>-TOP_LINE = L_SELLINE - <LINES> + 1 .
+    ELSE.
+      <TC>-TOP_LINE = 1.
+    ENDIF.
+  ELSE.                               " insert line into table
+    L_SELLINE = <TC>-TOP_LINE + L_SELLINE - 1.
+    L_LASTLINE = <TC>-TOP_LINE + <LINES> - 1.
+  ENDIF.
+*&SPWIZARD: set new cursor line                                        *
+  L_LINE = L_SELLINE - <TC>-TOP_LINE + 1.
+
+*&SPWIZARD: insert initial line                                        *
+  INSERT INITIAL LINE INTO <TABLE> INDEX L_SELLINE.
+  <TC>-LINES = <TC>-LINES + 1.
+*&SPWIZARD: set cursor                                                 *
+  SET CURSOR LINE L_LINE.
+
+ENDFORM.                              " FCODE_INSERT_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_DELETE_ROW                                         *
+*&---------------------------------------------------------------------*
+FORM fcode_delete_row
+              USING    P_TC_NAME           TYPE DYNFNAM
+                       P_TABLE_NAME
+                       P_MARK_NAME   .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA L_TABLE_NAME       LIKE FELD-NAME.
+
+  FIELD-SYMBOLS <TC>         TYPE cxtab_control.
+  FIELD-SYMBOLS <TABLE>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <WA>.
+  FIELD-SYMBOLS <MARK_FIELD>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (P_TC_NAME) TO <TC>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE P_TABLE_NAME '[]' INTO L_TABLE_NAME. "table body
+  ASSIGN (L_TABLE_NAME) TO <TABLE>.                "not headerline
+
+*&SPWIZARD: delete marked lines                                        *
+  DESCRIBE TABLE <TABLE> LINES <TC>-LINES.
+
+  LOOP AT <TABLE> ASSIGNING <WA>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT P_MARK_NAME OF STRUCTURE <WA> TO <MARK_FIELD>.
+
+    IF <MARK_FIELD> = 'X'.
+      DELETE <TABLE> INDEX SYST-TABIX.
+      IF SY-SUBRC = 0.
+        <TC>-LINES = <TC>-LINES - 1.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+ENDFORM.                              " FCODE_DELETE_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  COMPUTE_SCROLLING_IN_TC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*      -->P_OK       ok code
+*----------------------------------------------------------------------*
+FORM COMPUTE_SCROLLING_IN_TC USING    P_TC_NAME
+                                      P_OK.
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA L_TC_NEW_TOP_LINE     TYPE I.
+  DATA L_TC_NAME             LIKE FELD-NAME.
+  DATA L_TC_LINES_NAME       LIKE FELD-NAME.
+  DATA L_TC_FIELD_NAME       LIKE FELD-NAME.
+
+  FIELD-SYMBOLS <TC>         TYPE cxtab_control.
+  FIELD-SYMBOLS <LINES>      TYPE I.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (P_TC_NAME) TO <TC>.
+*&SPWIZARD: get looplines of TableControl                              *
+  CONCATENATE 'G_' P_TC_NAME '_LINES' INTO L_TC_LINES_NAME.
+  ASSIGN (L_TC_LINES_NAME) TO <LINES>.
+
+
+*&SPWIZARD: is no line filled?                                         *
+  IF <TC>-LINES = 0.
+*&SPWIZARD: yes, ...                                                   *
+    L_TC_NEW_TOP_LINE = 1.
+  ELSE.
+*&SPWIZARD: no, ...                                                    *
+    CALL FUNCTION 'SCROLLING_IN_TABLE'
+      EXPORTING
+        ENTRY_ACT             = <TC>-TOP_LINE
+        ENTRY_FROM            = 1
+        ENTRY_TO              = <TC>-LINES
+        LAST_PAGE_FULL        = 'X'
+        LOOPS                 = <LINES>
+        OK_CODE               = P_OK
+        OVERLAPPING           = 'X'
+      IMPORTING
+        ENTRY_NEW             = L_TC_NEW_TOP_LINE
+      EXCEPTIONS
+*       NO_ENTRY_OR_PAGE_ACT  = 01
+*       NO_ENTRY_TO           = 02
+*       NO_OK_CODE_OR_PAGE_GO = 03
+        OTHERS                = 0.
+  ENDIF.
+
+*&SPWIZARD: get actual tc and column                                   *
+  GET CURSOR FIELD L_TC_FIELD_NAME
+             AREA  L_TC_NAME.
+
+  IF SYST-SUBRC = 0.
+    IF L_TC_NAME = P_TC_NAME.
+*&SPWIZARD: et actual column                                           *
+      SET CURSOR FIELD L_TC_FIELD_NAME LINE 1.
+    ENDIF.
+  ENDIF.
+
+*&SPWIZARD: set the new top line                                       *
+  <TC>-TOP_LINE = L_TC_NEW_TOP_LINE.
+
+
+ENDFORM.                              " COMPUTE_SCROLLING_IN_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_MARK_LINES
+*&---------------------------------------------------------------------*
+*       marks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+FORM FCODE_TC_MARK_LINES USING P_TC_NAME
+                               P_TABLE_NAME
+                               P_MARK_NAME.
+*&SPWIZARD: EGIN OF LOCAL DATA-----------------------------------------*
+  DATA L_TABLE_NAME       LIKE FELD-NAME.
+
+  FIELD-SYMBOLS <TC>         TYPE cxtab_control.
+  FIELD-SYMBOLS <TABLE>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <WA>.
+  FIELD-SYMBOLS <MARK_FIELD>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (P_TC_NAME) TO <TC>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE P_TABLE_NAME '[]' INTO L_TABLE_NAME. "table body
+  ASSIGN (L_TABLE_NAME) TO <TABLE>.                "not headerline
+
+*&SPWIZARD: mark all filled lines                                      *
+  LOOP AT <TABLE> ASSIGNING <WA>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT P_MARK_NAME OF STRUCTURE <WA> TO <MARK_FIELD>.
+
+    <MARK_FIELD> = 'X'.
+  ENDLOOP.
+ENDFORM.                                          "fcode_tc_mark_lines
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_DEMARK_LINES
+*&---------------------------------------------------------------------*
+*       demarks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+FORM FCODE_TC_DEMARK_LINES USING P_TC_NAME
+                                 P_TABLE_NAME
+                                 P_MARK_NAME .
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA L_TABLE_NAME       LIKE FELD-NAME.
+
+  FIELD-SYMBOLS <TC>         TYPE cxtab_control.
+  FIELD-SYMBOLS <TABLE>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <WA>.
+  FIELD-SYMBOLS <MARK_FIELD>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (P_TC_NAME) TO <TC>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE P_TABLE_NAME '[]' INTO L_TABLE_NAME. "table body
+  ASSIGN (L_TABLE_NAME) TO <TABLE>.                "not headerline
+
+*&SPWIZARD: demark all filled lines                                    *
+  LOOP AT <TABLE> ASSIGNING <WA>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT P_MARK_NAME OF STRUCTURE <WA> TO <MARK_FIELD>.
+
+    <MARK_FIELD> = SPACE.
+  ENDLOOP.
+ENDFORM.                                          "fcode_tc_mark_lines
+*&---------------------------------------------------------------------*
+*&      Form  F_VERIFICAR_SERIES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_VERIFICAR_SERIES .
+  gt_sernr_tc[] = gt_sernr.
+  sort gt_sernr_tc.
+  delete ADJACENT DUPLICATES FROM gt_sernr_tc.
+  select ebeln ebelp vbeln into CORRESPONDING FIELDS OF TABLE gt_ekes
+    from ekes where vbeln = pa_vbeln.
+  if sy-subrc ne 0.
+    move pa_vbeln to gs_alv-vbeln.
+*    move pa_vbeln to gs_alv-ebeln.
+    move text-e03 to gs_alv-textoerr.
+    append gs_alv to gt_alv.
+  else.
+    select * into CORRESPONDING FIELDS OF TABLE gt_ztmm_1233
+      from ztmm_1233
+      FOR ALL ENTRIES IN gt_ekes
+*      where ebeln = pa_vbeln.
+        where ebeln = gt_ekes-ebeln
+          and ebelp = gt_ekes-ebelp.
+    if sy-subrc ne 0.
+      move pa_vbeln to gs_alv-vbeln.
+*    move pa_vbeln to gs_alv-ebeln.
+      move text-e03 to gs_alv-textoerr.
+      append gs_alv to gt_alv.
+    else.
+      sort gt_ztmm_1233 by sernr."ebeln sernr.
+      loop at GT_ZTMM_1233 into GS_ZTMM_1233.
+        move GS_ZTMM_1233-matnr to gs_matnr-matnr.
+        append gs_matnr to gt_matnr.
+        move GS_ZTMM_1233-sernr to gs_sernr_bd-sernr.
+        append gs_sernr_bd to gt_sernr_bd.
+      endloop.
+      if gt_matnr is not initial.
+        sort gt_matnr by matnr.
+        delete ADJACENT DUPLICATES FROM gt_matnr.
+        select matnr maktx into TABLE gt_matnr
+          from makt FOR ALL ENTRIES IN gt_matnr
+          where matnr = gt_matnr-matnr
+            and spras = sy-langu.
+        if sy-subrc eq 0.
+          sort gt_matnr by matnr.
+          delete ADJACENT DUPLICATES FROM gt_matnr.
+        endif.
+      endif.
+*    select sernr into CORRESPONDING FIELDS OF TABLE gt_sernr_bd
+*      from ztmm_1233
+**  FOR ALL ENTRIES IN gt_sernr_aux1
+*        where ebeln = pa_vbeln.
+**      and sernr = gt_sernr_aux1-sernr.
+*    if sy-subrc eq 0.
+      sort gt_sernr_bd.
+      delete ADJACENT DUPLICATES FROM gt_sernr_bd.
+      sort gt_sernr_tc.
+      delete ADJACENT DUPLICATES FROM gt_sernr_tc.
+*  contar las series que hay en cada tabla
+      describe TABLE gt_sernr_bd lines gv_linea_bd.
+      describe TABLE gt_sernr_tc lines gv_linea_tc.
+*      if gv_linea_bd eq gv_linea_tc.
+*      else.
+      loop at gt_sernr_tc into gs_sernr_tc.
+*          CALL FUNCTION 'CONVERSION_EXIT_GERNR_INPUT'
+*            EXPORTING
+*              INPUT         = gs_sernr_tc-sernr
+*           IMPORTING
+*             OUTPUT        = gs_sernr_tc-sernr.
+        read table gt_sernr_bd into gs_sernr_bd with key sernr = gs_sernr_tc-sernr BINARY SEARCH.
+        if sy-subrc ne 0.
+          move pa_vbeln to gs_alv-vbeln.
+*            move pa_vbeln to gs_alv-ebeln.
+          move gs_sernr_tc-sernr to gs_alv-sernr.
+          move gc_1 to gs_alv-tipoerr.
+          move text-e01 to gs_alv-textoerr.
+          append gs_alv to gt_alv.
+        else.
+          delete gt_sernr_bd INDEX sy-tabix.
+          delete gt_sernr_tc INDEX sy-tabix.
+        endif.
+      endloop.
+      if gt_sernr_bd is initial and gt_sernr_tc is initial.
+        move pa_vbeln to gs_alv-ebeln.
+        move gc_0 to gs_alv-tipoerr.
+        move text-002 to gs_alv-textoerr.
+        append gs_alv to gt_alv.
+      endif.
+      if gt_sernr_bd is not initial.
+        sort gt_ztmm_1233 by sernr.
+        loop at gt_sernr_bd into gs_sernr_bd.
+          read table gt_ztmm_1233 into gs_ztmm_1233 with key sernr = gs_sernr_bd-sernr BINARY SEARCH.
+          if sy-subrc eq 0.
+            move pa_vbeln to gs_alv-vbeln.
+            move gs_ztmm_1233-ebeln to gs_alv-ebeln.
+            move gs_ztmm_1233-ebelp to gs_alv-ebelp.
+            move gs_ztmm_1233-matnr to gs_alv-matnr.
+            read table gt_matnr into gs_matnr with KEY matnr = gs_ztmm_1233-matnr BINARY SEARCH.
+            if sy-subrc eq 0.
+              move gs_matnr-maktx to gs_alv-maktx.
+            endif.
+            move gs_ztmm_1233-sernr to gs_alv-sernr.
+            move gc_2 to gs_alv-tipoerr.
+            move text-e02 to gs_alv-textoerr.
+            append gs_alv to gt_alv.
+          endif.
+        endloop.
+      endif.
+*      endif.
+*    endif.
+    endif.
+  endif.
+ENDFORM.                    " F_VERIFICAR_SERIES
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0200  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE STATUS_0200 OUTPUT.
+  SET PF-STATUS 'STATUS_200'.
+  SET TITLEBAR 'STATUS_200'.
+
+* Create Controls
+  CREATE OBJECT go_container
+    EXPORTING
+      CONTAINER_NAME = 'ALV_CONTAINER'.
+
+  CREATE OBJECT go_grid
+    EXPORTING
+      I_PARENT = GO_CONTAINER.
+
+*  Populate Field Catalog
+  PERFORM F_GET_FIELDCATALOG.
+
+
+  CALL METHOD GO_GRID->SET_TABLE_FOR_FIRST_DISPLAY
+    EXPORTING
+      i_structure_name = 'ZTMM_1234'
+    CHANGING
+      IT_OUTTAB        = GT_ALV[].
+*           IT_FIELDCATALOG = GT_FIELDCAT[].
+
+
+*ENDMODULE.
+
+
+ENDMODULE.                 " STATUS_0200  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE USER_COMMAND_0200 INPUT.
+  move sy-ucomm to gv_ok_code.
+  case gv_ok_code.
+    when 'BACK'.
+*      CLEAR GT_SERNR.REFRESH GT_SERNR.
+      CALL METHOD go_container->free.
+      CALL METHOD cl_gui_cfw=>flush.
+
+      clear gs_alv.clear gt_alv. refresh gt_alv.
+      CLEAR gv_ok_code.clear sy-ucomm.
+      LEAVE TO SCREEN '0100'.
+    when 'EXIT'.
+      LEAVE PROGRAM.
+  endcase.
+ENDMODULE.                 " USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*&      Form  F_GET_FIELDCATALOG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_GET_FIELDCATALOG .
+  DATA: LS_FCAT TYPE LVC_S_FCAT.
+
+  REFRESH: GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '1'.
+  LS_FCAT-REPTEXT    = 'Tipo Error'.
+  LS_FCAT-FIELDNAME  = 'TIPOERR'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '18'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '2'.
+  LS_FCAT-REPTEXT    = 'Entrega'.
+  LS_FCAT-FIELDNAME  = 'EBELN'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '18'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '3'.
+  LS_FCAT-REPTEXT    = 'Pos. Entrega'.
+  LS_FCAT-FIELDNAME  = 'EBELP'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '12'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '4'.
+  LS_FCAT-REPTEXT    = 'Material'.
+  LS_FCAT-FIELDNAME  = 'MATNR'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '20'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '5'.
+  LS_FCAT-REPTEXT    = 'Desc. Material'.
+  LS_FCAT-FIELDNAME  = 'MAKTX'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '40'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '6'.
+  LS_FCAT-REPTEXT    = 'Serie'.
+  LS_FCAT-FIELDNAME  = 'SERNR'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '20'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+  CLEAR: LS_FCAT.
+  LS_FCAT-COL_POS    = '7'.
+  LS_FCAT-REPTEXT    = 'Error'.
+  LS_FCAT-FIELDNAME  = 'TEXTOERR'.
+  LS_FCAT-REF_TABLE  = 'GT_ALV'.
+*  LS_FCAT-OUTPUTLEN  = '50'.
+  APPEND LS_FCAT TO GT_FIELDCAT.
+
+ENDFORM.                    " F_GET_FIELDCATALOG
+*&---------------------------------------------------------------------*
+*&      Form  F_VERIFICAR_ENTREGA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_VERIFICAR_ENTREGA .
+select SINGLE * from likp
+  where vbeln = pa_vbeln.
+if sy-subrc ne 0.
+  "clear gv_ok_code.
+  "clear sy-ucomm.
+  MESSAGE s001(00) WITH text-E03 DISPLAY LIKE 'E'.
+  move abap_true to gv_err.
+endif.
+ENDFORM.                    " F_VERIFICAR_ENTREGA

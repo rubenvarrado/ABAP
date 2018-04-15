@@ -1,0 +1,135 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0003_CL1
+*&---------------------------------------------------------------------*
+
+* Define a class for a data object to exchange data
+* between two controls using the drag and drop operation.
+CLASS lcl_dragdropobj DEFINITION.
+  PUBLIC SECTION.
+* The node_key is needed to decide which function shall be performed:
+    DATA: node_key(12) TYPE c.
+
+ENDCLASS.                    "lcl_dragdropobj DEFINITION
+
+*---------------------------------------------------------------------*
+*       CLASS LCL_APPLICATION DEFINITION
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+
+* § 7. Implement your drag and drop behaviour. Define a class and
+*      implement event handler methods for this purpose.
+*      (see also other examples)
+CLASS lcl_application DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS:
+      handle_tree_drag
+        FOR EVENT on_drag
+        OF cl_gui_simple_tree
+        IMPORTING node_key drag_drop_object,
+      handle_alv_drop
+        FOR EVENT ondrop
+        OF cl_gui_alv_grid
+        IMPORTING e_row e_column e_dragdropobj.
+ENDCLASS.                    "lcl_application DEFINITION
+* ~~~~~~~~~~~
+class lcl_event_receiver definition.
+
+  public section.
+    methods:
+
+    handle_double_click
+        for event double_click of cl_gui_alv_grid
+            importing e_row e_column es_row_no.
+
+  private section.
+
+endclass.                    "lcl_event_receiver DEFINITION
+*
+* lcl_event_receiver (Definition)
+*===============================================================
+
+****************************************************************
+* LOCAL CLASSES: Implementation
+****************************************************************
+*===============================================================
+* class lcl_event_receiver (Implementation)
+*
+* In this example, only event DOUBLE_CLICK is caught
+*
+class lcl_event_receiver implementation.
+
+  method handle_double_click.
+
+  PERFORM f_handle_double_click USING es_row_no .
+
+  endmethod.                           "handle_double_click
+
+endclass.                    "lcl_event_receiver IMPLEMENTATION
+*---------------------------------------------------------------------*
+*       CLASS LCL_APPLICATION IMPLEMENTATION
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+CLASS lcl_application IMPLEMENTATION.
+*-------------------------------------------------------------------
+* In the 'onDrag' event handler create a data object and fill it with
+* appropriate data for your intended operation. This event is used
+* to 'fetch' information from the drag source.
+  METHOD handle_tree_drag.
+    DATA: dataobj TYPE REF TO lcl_dragdropobj.
+* create and fill dataobject for events ONDROP and ONDROPCOMPLETE
+    CREATE OBJECT dataobj.
+    MOVE node_key TO dataobj->node_key.
+
+* Assign your data object to the refering event parameter.
+* This parameter ensures that your data object can be referenced
+* in each of the following events.
+    drag_drop_object->object = dataobj.
+  ENDMETHOD.                    "handle_tree_drag
+*--------------------------------------------------------------------
+* Implement the event handler for event 'OnDrop'. This event is used
+* to use your dragged information in combination with your drop
+* source. What is more, you should make all checks
+* if the operation is successful _at this point_.
+  METHOD handle_alv_drop.
+    DATA: dataobj TYPE REF TO lcl_dragdropobj.
+    data: lv_nodo(10) type c.
+*!!!
+* Very importent: 'e_dragDropObj->object' can have any instance type
+* The needed cast type may lead to a system-exception if the
+* cast can not be performed.
+* For this reason: use ALWAYS the Catch-Statement to make sure
+* that the drag&drop-Operation is aborted properly.
+*!!!
+    CATCH SYSTEM-EXCEPTIONS move_cast_error = 1.
+
+      dataobj ?= e_dragdropobj->object.
+      gv_drop_line = e_row-index.
+* invoke function according to the node key:
+*      CASE dataobj->node_key.
+*      sort
+
+*      read table GT_HRP1000 into Gs_HRP1000 index dataobj->node_key.
+      read table gt_kna1 into gs_kna1 index dataobj->node_key.
+*        move dataobj->node_key to lv_nodo.
+
+*      perform f_set_smoker USING dataobj->node_key.
+      perform f_set_smoker USING gs_kna1-sortl.
+*        WHEN 'SET'.
+*          perform set_smoker.
+*        WHEN 'SET1'.
+*          perform set_smoker1.
+*        when 'CLEAR'.
+*          perform clear_smoker.
+*      ENDCASE..
+    ENDCATCH.
+    IF sy-subrc <> 0.
+* If anything went wrong this is the clean way of aborting the
+* drag and drop operation:
+      CALL METHOD e_dragdropobj->abort.
+    ENDIF.
+  ENDMETHOD.                    "handle_alv_drop
+
+ENDCLASS.                    "lcl_application IMPLEMENTATION

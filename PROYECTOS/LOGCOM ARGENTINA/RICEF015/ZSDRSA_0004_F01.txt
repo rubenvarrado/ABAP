@@ -1,0 +1,522 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0004_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  F_AUTHORITY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_AUTHORITY.
+  AUTHORITY-CHECK OBJECT 'S_TCODE'
+           ID 'TCD' FIELD sy-tcode.
+  IF sy-subrc NE 0.
+    MESSAGE e172(00) WITH sy-tcode.
+  ENDIF.
+ENDFORM.                    " F_AUTHORITY
+*&---------------------------------------------------------------------*
+*&      Form  F_SELECCION_DATOS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_SELECCION_DATOS.
+
+  perform f_seleccion_mesas.
+  perform f_seleccion_entregas.
+
+ENDFORM.                    " F_SELECCION_DATOS
+*&---------------------------------------------------------------------*
+*&      Form  F_SELECCION_MESAS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_SELECCION_MESAS.
+
+  select * from kna1
+    into corresponding fields of table gt_kna1
+    where kunnr in so_kunnr
+*      and ktokd eq gc_z001
+      and ( ktokd eq gc_z001 OR
+            ktokd eq 'ZGEN' )
+      and loevm eq gc_vacio.
+  if sy-subrc eq 0.
+    sort gt_kna1 by kunnr.
+    LOOP AT GT_KNA1 INTO GS_KNA1.
+      r_kunnr-sign = gc_i.
+      r_kunnr-option = gc_eq.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          INPUT  = gs_kna1-kunnr
+        IMPORTING
+          OUTPUT = gs_kna1-kunnr.
+      r_kunnr-low = gs_kna1-kunnr.
+      append r_kunnr.
+    ENDLOOP.
+  endif.
+
+ENDFORM.                    " F_SELECCION_MESAS
+*&---------------------------------------------------------------------*
+*&      Form  F_SELECCION_ENTREGAS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_SELECCION_ENTREGAS.
+
+  select * into corresponding fields of table gt_outtab1
+    from likp as a
+    INNER JOIN vbuk as b on
+    a~vbeln = b~vbeln
+    inner join vbpa as c on
+    a~vbeln = c~vbeln
+    where a~vbeln in so_vbeln
+      and a~vstel in so_vstel
+      and a~kodat in so_kodat
+      and a~lfart in so_lfart
+      and ( b~kostk eq gc_a or
+            b~kostk eq gc_b )
+      and b~wbstk ne gc_c
+      and c~kunnr in r_kunnr.
+  if sy-subrc eq 0.
+    loop at gt_outtab1 into gs_outtab.
+      move gs_outtab-vbeln to gs_vbpavbeln-vbeln.
+      append gs_vbpavbeln to gt_vbpavbeln.
+    endloop.
+    if gt_vbpavbeln is not initial.
+      sort gt_vbpavbeln.
+      delete ADJACENT DUPLICATES FROM gt_vbpavbeln.
+    endif.
+
+    select * into corresponding fields of table gt_sernp
+      from lips as a
+      inner join marc as b on
+      a~matnr = b~matnr
+      inner join marc as c on
+      a~matnr = c~matnr and
+      a~werks = c~werks
+      inner join ztsd_0050 as d on
+      a~vbeln = d~vbeln
+      inner join makt as e on
+      a~matnr = e~matnr and
+      e~spras = sy-langu
+      for all entries in gt_vbpavbeln
+        where a~vbeln = gt_vbpavbeln-vbeln.
+    if gt_sernp[] is not initial.
+      sort gt_sernp by vbeln posnr.
+      delete ADJACENT DUPLICATES FROM gt_ztsd_0051 COMPARING ALL FIELDS.
+    endif.
+    select * from ztsd_0051 into TABLE gt_ztsd_0051
+      FOR ALL ENTRIES IN gt_sernp
+      where vbeln eq gt_sernp-vbeln
+        and posnr eq gt_sernp-posnr.
+    if sy-subrc eq 0.
+      sort gt_ztsd_0051 by vbeln posnr.
+    endif.
+*Buscar en la tabla 51 y lo que no encuentre busco los materiales en la marc campo SERNP
+*por z012 o perfil blanco, lo que este es NO SERIADO, y lo que no este es que es
+*SERIADO y no va a salir.
+*    if gt_sernp is not initial.
+*      sort gt_sernp.
+*      delete ADJACENT DUPLICATES FROM gt_sernp COMPARING ALL FIELDS.
+*    endif.
+    loop at gt_sernp into gs_sernp.
+      read TABLE gt_ztsd_0051 into gs_ztsd_0051 with key vbeln = gs_sernp-vbeln
+                                                         posnr = gs_sernp-posnr BINARY SEARCH.
+      if sy-subrc eq 0.
+        loop at gt_ztsd_0051 into gs_ztsd_0051 where vbeln = gs_sernp-vbeln and
+                                                         posnr = gs_sernp-posnr.
+          MOVE-CORRESPONDING gs_sernp to gs_outtab.
+          move gs_ztsd_0051-agrup1 to gs_outtab-agrup1.
+          move gs_ztsd_0051-agrup2 to gs_outtab-agrup2.
+          append gs_outtab to gt_outtab.
+        endloop.
+      else.
+        if gs_sernp-sernp eq 'Z012' or gs_sernp-sernp IS INITIAL.
+          MOVE-CORRESPONDING gs_sernp to gs_outtab.
+          append gs_outtab to gt_outtab.
+        endif.
+      endif.
+    endloop.
+    if gt_outtab is not initial.
+      sort gt_outtab.
+      delete ADJACENT DUPLICATES FROM gt_outtab COMPARING ALL FIELDS.
+    endif.
+  endif.
+
+ENDFORM.                    " F_SELECCION_ENTREGAS
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_EDITABLE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_ALV_EDITABLE .
+
+  PERFORM f_catalogo.
+  PERFORM f_mostrar_alv.
+
+ENDFORM.                    " F_ALV_EDITABLE
+*&---------------------------------------------------------------------*
+*&      Form  F_CATALOGO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_CATALOGO .
+* gt_layout-colwidth_optimize = 'X'.
+* gs_layout-sel_mode = 'A'. "GAM
+gt_layout-stylefname = 'FIELD_STYLE'.
+PERFORM set_specific_field_attributes.
+
+*  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+*    EXPORTING
+*      I_PROGRAM_NAME         = sy-repid
+*      I_STRUCTURE_NAME       = 'ZESD_0104'
+*      I_CLIENT_NEVER_DISPLAY = 'X'
+*    CHANGING
+*      CT_FIELDCAT            = GT_FIELDCAT
+*    EXCEPTIONS
+*      INCONSISTENT_INTERFACE = 1
+*      PROGRAM_ERROR          = 2
+*      OTHERS                 = 3.
+*
+*  IF SY-SUBRC <> 0.
+*  ENDIF.
+
+ CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+  EXPORTING
+    I_STRUCTURE_NAME             = 'ZESD_0104'
+  CHANGING
+     CT_FIELDCAT                  = GT_FIELDCAT
+  EXCEPTIONS
+    INCONSISTENT_INTERFACE       = 1
+    PROGRAM_ERROR                = 2
+    OTHERS                       = 3.
+ IF SY-SUBRC <> 0.
+* Implement suitable error handling here
+ ENDIF.
+
+  loop at gt_fieldcat into gs_fieldcat.
+    case gs_fieldcat-fieldname.
+      when 'AGRUP1'.
+        gs_fieldcat-no_out = 'X'.
+      when 'AGRUP2'.
+        gs_fieldcat-no_out = 'X'.
+      when 'IMEI'.
+        gs_fieldcat-edit        = 'X'.
+      when 'IMEI2'.
+        gs_fieldcat-edit        = 'X'.
+      when 'CANT'.
+        gs_fieldcat-edit        = 'X'.
+    endcase.
+    modify gt_fieldcat from gs_fieldcat.
+  ENDLOOP.
+
+ENDFORM.                    " F_CATALOGO
+*&---------------------------------------------------------------------*
+*&      Form  F_MOSTRAR_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_MOSTRAR_ALV .
+
+*  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program      = sy-repid "program name
+      i_callback_user_command = 'USER_COMMAND' "user command subroutine name
+      i_callback_pf_status_set = 'PF_STATUS_SET'
+*     i_callback_top_of_page  = form_top_of_page "sub routine for top of page
+      is_layout_lvc               = gt_layout
+      it_fieldcat_lvc             = gt_fieldcat
+      i_save                  = gc_x
+      is_variant              = gv_variant
+    TABLES
+      t_outtab                = gt_alv
+    EXCEPTIONS
+      program_error           = 1
+      others                  = 2.
+  if sy-subrc <> 0.
+    message id sy-msgid type sy-msgty number sy-msgno
+            with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  endif.
+
+ENDFORM.                    " F_MOSTRAR_ALV
+*&---------------------------------------------------------------------*
+*&      Form  set_specific_field_attributes
+*&---------------------------------------------------------------------*
+*       populate FIELD_STYLE table with specific field attributes
+*----------------------------------------------------------------------*
+form set_specific_field_attributes .
+  DATA ls_stylerow TYPE lvc_s_styl .
+  DATA lt_styletab TYPE lvc_t_styl .
+
+* Populate style variable (FIELD_STYLE) with style properties
+*
+* The NETPR field/column has been set to editable in the fieldcatalog...
+* The following code sets it to be disabled(display only) if 'NETPR'
+* is gt than 10.
+  LOOP AT gt_alv INTO gs_alv.
+    IF gs_alv-matnr3 is initial.
+      clear ls_stylerow.
+      ls_stylerow-fieldname = 'CANT' .
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+                                             "set field to disabled
+      APPEND ls_stylerow TO gs_alv-field_style." sorted by FIELDNAME.
+    ENDIF.
+    IF gs_alv-matnr is initial.
+      ls_stylerow-fieldname = 'IMEI' .
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+                                             "set field to disabled
+      APPEND ls_stylerow  TO gs_alv-field_style.
+    ENDIF.
+    IF gs_alv-matnr2 is initial.
+      ls_stylerow-fieldname = 'IMEI2' .
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+                                             "set field to disabled
+      APPEND ls_stylerow  TO gs_alv-field_style.
+    ENDIF.
+
+    MODIFY gt_alv FROM gs_alv .
+  ENDLOOP.
+
+endform.                    " set_specific_field_attributes
+*&---------------------------------------------------------------------*
+*&      Form  F_RELLENAR_TABLA_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_RELLENAR_TABLA_ALV .
+  data: lv_flagnoadd type c,
+        lv_flagadd type c,
+        lv_flagsalta type c,
+        lv_posnrant type POSNR_VL,
+        lv_contador type i,
+        lv_voltloop type i,
+        lv_vbelnant type vbeln_vl,
+        lv_mtartant type mtart,
+        lv_agrup1act type ZZAGRUP1,
+        lv_agrup1ant type ZZAGRUP1,
+        lv_agrup2act type ZZAGRUP1,
+        lv_agrup2ant type ZZAGRUP1.
+
+  loop at gt_outtab into gs_outtab.
+    MOVE-CORRESPONDING gs_outtab to gs_outtab_ord.
+    MOVE-CORRESPONDING gs_outtab to gs_outtab_ord_uti.
+    append gs_outtab_ord to gt_outtab_ord.
+    append gs_outtab_ord_uti to gt_outtab_ord_uti.
+*    exit.
+  endloop.
+  if gt_outtab_ord is not initial.
+    sort gt_outtab_ord by vbeln agrup1 agrup2.
+    sort gt_outtab_ord_uti by vbeln agrup1 agrup2.
+    clear lv_flagadd. clear lv_flagnoadd.
+    clear lv_vbelnant. clear lv_mtartant.
+    clear lv_agrup1act. clear lv_agrup1ant.
+    clear lv_agrup2act. clear lv_agrup2ant.
+  endif.
+
+*  BREAK IND848.
+  loop at gt_outtab_ord into gs_outtab_ord.
+    clear lv_voltloop.
+    if gs_outtab_ord-mtart eq gc_zin2.
+      MOVE-CORRESPONDING gs_outtab_ord to gs_alv.
+      clear gs_alv-matnr.
+      move gs_outtab_ord-matnr to gs_alv-matnr3.
+      move gs_outtab_ord-maktx to gs_alv-maktx3.
+      clear gs_alv-maktx.
+      append gs_alv to gt_alv.
+      continue.
+    endif.
+    read TABLE gt_outtab_ord_uti into gs_outtab_ord_uti with key vbeln = gs_outtab_ord-vbeln
+                                                           agrup1 = gs_outtab_ord-agrup1
+                                                           agrup2 = gs_outtab_ord-agrup2
+                                                           posnr = gs_outtab_ord-posnr.
+    if sy-subrc eq 0.
+      if gs_outtab_ord_uti-utilizado eq gc_x.
+        continue.
+      endif.
+    endif.
+
+    loop at gt_outtab_ord_uti into gs_outtab_ord_uti where vbeln = gs_outtab_ord-vbeln and
+                                                           agrup1 = gs_outtab_ord-agrup1 and
+                                                           agrup2 = gs_outtab_ord-agrup2 and
+                                                           utilizado ne gc_x.
+*                                                         mtart ne gs_outtab_ord-mtart. "BINARY SEARCH.
+
+      add 1 to lv_voltloop.
+      if gs_outtab_ord-vbeln eq gs_outtab_ord_uti-vbeln and
+         gs_outtab_ord-posnr eq gs_outtab_ord_uti-posnr.
+        move gc_x to gs_outtab_ord_uti-utilizado.
+        modify gt_outtab_ord_uti from gs_outtab_ord_uti.
+        move gc_x to lv_flagsalta.
+        continue.
+      endif.
+
+*  if sy-subrc eq 0. "Encuentro con quien combinarla.
+      if gs_outtab_ord_uti-utilizado eq gc_x.
+        continue.
+      endif.
+      add 1 to lv_contador.
+      move gc_x to gs_outtab_ord_uti-utilizado.
+      modify gt_outtab_ord_uti from gs_outtab_ord_uti.
+      MOVE-CORRESPONDING gs_outtab_ord to gs_alv.
+      if gs_outtab_ord_uti-mtart eq gc_zbc1.
+        move gs_outtab_ord_uti-matnr to gs_alv-matnr.
+        move gs_outtab_ord_uti-maktx to gs_alv-maktx.
+      elseif gs_outtab_ord_uti-mtart eq gc_zin1.
+        move gs_outtab_ord_uti-matnr to gs_alv-matnr2.
+*        clear gs_alv-maktx.
+        move gs_outtab_ord_uti-maktx to gs_alv-maktx2.
+      elseif gs_outtab_ord_uti-mtart eq gc_zin2.
+        move gs_outtab_ord_uti-matnr to gs_alv-matnr3.
+        clear gs_alv-maktx.
+        move gs_outtab_ord_uti-maktx to gs_alv-maktx3.
+      endif.
+      clear lv_flagsalta.
+      exit.
+*  endif.
+    endloop.
+    if lv_voltloop eq gc_1.
+      MOVE-CORRESPONDING gs_outtab_ord to gs_alv.
+      clear gs_alv-matnr.
+      if gs_outtab_ord-mtart eq gc_zbc1.
+        move gs_outtab_ord-matnr to gs_alv-matnr.
+        move gs_outtab_ord-maktx to gs_alv-maktx.
+      elseif gs_outtab_ord-mtart eq gc_zin1.
+        move gs_outtab_ord-matnr to gs_alv-matnr2.
+        clear gs_alv-maktx.
+        move gs_outtab_ord-maktx to gs_alv-maktx2.
+      endif.
+      append gs_alv to gt_alv.
+      clear lv_voltloop.
+      CONTINUE.
+    endif.
+    if lv_contador is initial and lv_flagsalta is initial.
+      MOVE-CORRESPONDING gs_outtab_ord to gs_alv.
+      clear gs_alv-matnr.
+      if gs_outtab_ord-mtart eq gc_zbc1.
+        move gs_outtab_ord-matnr to gs_alv-matnr.
+        move gs_outtab_ord-maktx to gs_alv-maktx.
+      elseif gs_outtab_ord-mtart eq gc_zin1.
+        move gs_outtab_ord-matnr to gs_alv-matnr2.
+        clear gs_alv-maktx.
+        move gs_outtab_ord-maktx to gs_alv-maktx2.
+      elseif gs_outtab_ord-mtart eq gc_zin2.
+        move gs_outtab_ord-matnr to gs_alv-matnr3.
+        clear gs_alv-maktx.
+        move gs_outtab_ord-maktx to gs_alv-maktx3.
+      endif.
+      clear lv_flagsalta.
+    endif.
+    if lv_flagsalta is initial.
+      append gs_alv to gt_alv.
+      clear lv_flagsalta.
+    endif.
+    clear lv_contador.
+  endloop.
+
+  ENDFORM.                    " F_RELLENAR_TABLA_ALV
+
+FORM user_command USING r_ucomm LIKE sy-ucomm
+                  rs_selfield TYPE slis_selfield.
+
+* Check function code
+  CASE r_ucomm.
+    when 'PICKING'.
+      BREAK-POINT.
+    when 'EXIT'.
+*      BREAK-POINT.
+      leave to screen 0.
+    when 'LOGERROR'.
+      BREAK-POINT.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F4_FOR_VARIANT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F4_FOR_VARIANT .
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      is_variant          = gv_variant
+      i_save              = gv_save
+*     it_default_fieldcat =
+    IMPORTING
+      e_exit              = gv_exit
+      es_variant          = gx_variant
+    EXCEPTIONS
+      not_found           = 2.
+  if sy-subrc = 2.
+    message id sy-msgid type 's'      number sy-msgno
+            with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  else.
+    if gv_exit = space.
+      pa_vari = gx_variant-variant.
+    endif.
+  endif.
+ENDFORM.                    " F4_FOR_VARIANT
+*&---------------------------------------------------------------------*
+*&      Form  F_VARIANT_INIT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_VARIANT_INIT .
+  clear gv_variant.
+  gv_variant-report = gv_repid.
+ENDFORM.                    " F_VARIANT_INIT
+*&---------------------------------------------------------------------*
+*&      Form  F_PAI_OF_SELECTION_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM F_PAI_OF_SELECTION_SCREEN .
+  if not pa_vari is initial.
+    move gv_variant to gx_variant.
+    move pa_vari to gx_variant-variant.
+    CALL FUNCTION 'REUSE_ALV_VARIANT_EXISTENCE'
+      EXPORTING
+        i_save     = gv_save
+      CHANGING
+        cs_variant = gx_variant.
+    gv_variant = gx_variant.
+  else.
+    perform f_variant_init.
+  endif.
+ENDFORM.                    " F_PAI_OF_SELECTION_SCREEN
+*&---------------------------------------------------------------------*
+*&      Form  PF_STATUS_SET
+*&---------------------------------------------------------------------*
+FORM PF_STATUS_SET USING    P_EXTAB TYPE SLIS_T_EXTAB.
+  SET PF-STATUS 'STANDARD'." EXCLUDING P_EXTAB.
+ENDFORM.                    "PF_STATUS_SET

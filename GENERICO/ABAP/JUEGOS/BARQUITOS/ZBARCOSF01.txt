@@ -1,0 +1,2220 @@
+*----------------------------------------------------------------------*
+*   INCLUDE ZBARCOSF01                                                 *
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  VALIDAR_DATOS
+*&---------------------------------------------------------------------*
+*       Validaciones de datos olbigatorios.
+*----------------------------------------------------------------------*
+*
+form VALIDAR_DATOS.
+*
+CLEAR ERROR.
+IF JUG1 IS INITIAL.
+  MESSAGE W897(SD) WITH 'Introduzca jugador 1'.
+  ERROR = 'S'.
+ENDIF.
+IF JUG2 IS INITIAL.
+  MESSAGE W897(SD) WITH 'Introduzca jugador 2'.
+  ERROR = 'S'.
+ENDIF.
+IF JUG1 = JUG2.
+  MESSAGE W897(SD) WITH 'Jugador 2 debe ser distinto a 1'.
+  ERROR = 'S'.
+ENDIF.
+SELECT SINGLE * FROM USR02 INTO USR02 where BNAME = JUG1.
+IF SY-SUBRC NE 0.
+  MESSAGE W897(SD) WITH 'Usuario no existente'.
+  ERROR = 'S'.
+ENDIF.
+SELECT SINGLE * FROM USR02 INTO USR02 where BNAME = JUG2.
+IF SY-SUBRC NE 0.
+  MESSAGE W897(SD) WITH 'Usuario no existente'.
+  ERROR = 'S'.
+ENDIF.
+IF IDEN IS INITIAL.
+  MESSAGE W897(SD) WITH 'Introduzca Identificador de partida'.
+  ERROR = 'S'.
+ENDIF.
+*
+endform.                    " VALIDAR_DATOS.
+*&---------------------------------------------------------------------*
+*&      Form  GRABAR_DATOS
+*&---------------------------------------------------------------------*
+*       Se graban los datos de la posicion de los barcos en la tabla
+*  ZBARCOS_DA. Para poder comenzar la partida.
+*----------------------------------------------------------------------*
+*
+form GRABAR_DATOS.
+*
+DATA: BEGIN OF WA_BAR.
+       INCLUDE STRUCTURE ZBARCOS_DA.
+DATA: END   OF WA_BAR.
+*
+perform borrar_partidas_anteriores.
+*
+IF ERROR <> 'S' AND PARTIDA <> 'S'.
+  DELETE FROM  ZBARCOS_DA
+          WHERE  USU1    =   JUG1       AND
+                 USU2    =   JUG2       AND
+                 IDEN    =   IDEN       AND
+                 FECH    =   SY-DATUM.
+  COMMIT WORK AND WAIT.
+  WA_BAR-MANDT  =  SY-MANDT.
+  WA_BAR-USU1   =  JUG1.
+  WA_BAR-USU2   =  JUG2.
+  WA_BAR-IDEN   =  IDEN.
+  WA_BAR-FECH   =  SY-DATUM.
+  LOOP AT T_COLOCA .
+    WA_BAR-LINE  =   T_COLOCA-LIN.
+    WA_BAR-COLU  =   T_COLOCA-COL.
+    WA_BAR-MARC  =   T_COLOCA-MAR.
+    INSERT INTO ZBARCOS_DA VALUES WA_BAR.
+    COMMIT WORK AND WAIT.
+  ENDLOOP.
+  PARTIDA = 'S'.
+ENDIF.
+*
+endform.                    " GRABAR_DATOS
+*&---------------------------------------------------------------------*
+*&      Form  MANDAR_MENSAJE
+*&---------------------------------------------------------------------*
+*      Se manda el mensaje al contrario.
+*----------------------------------------------------------------------*
+*
+form MANDAR_MENSAJE.
+*
+DATA: USER LIKE SY-UNAME.
+*
+IF MESSAGE_LEN = 0.
+  DESCRIBE FIELD TEX_MEN LENGTH MESSAGE_LEN.
+ENDIF.
+*
+USER  =  JUG2.
+*
+IF USER <> ' '.
+  IF CUT_BLANKS = ' '.
+    LOC_CUT_BLANKS = TH_FALSE.
+  ELSE.
+    LOC_CUT_BLANKS = TH_TRUE.
+  ENDIF.
+
+  CALL 'ThUsrInfo' ID 'OPCODE' FIELD OPCODE_SEND_POP_UP
+    ID 'CLIENT' FIELD CLIENT
+    ID 'USR' FIELD USER
+    ID 'MSG' FIELD TEX_MEN
+    ID 'MSG_LEN' FIELD MESSAGE_LEN
+    ID 'CUT_BLANKS' FIELD LOC_CUT_BLANKS.
+  IF SY-SUBRC = 4.
+    user = sy-uname.
+    TEX_MEN = 'Usuario no conectado'.
+    perform MANDAR_MENSAJE.
+  ENDIF.
+ELSE.
+  IF OKCODE <>  'FINALIZAR' AND  OKCODE <>  'F_ATRAS'     AND
+     OKCODE <>  'CANCEL'    AND  OKCODE <>  'F_CANCEL'    AND
+     OKCODE <>  'BACK'      AND  OKCODE <>  'F_VOLVER' .
+     MESSAGE I897(SD) WITH 'Introduzca contrario'.
+  ENDIF.
+ENDIF.
+*
+CLEAR: TEX_MEN.
+*
+endform.                    " MANDAR_MENSAJE
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_POSICION
+*&---------------------------------------------------------------------*
+*       Se busca la posición en la cual, el usuario ha pinchado con el
+*  ratón el doble click.
+*----------------------------------------------------------------------*
+*
+form BUSCAR_POSICION.
+*
+IF T_MAPA_P[] IS INITIAL.
+
+  CALL FUNCTION 'IMPORT_DYNPRO'
+   EXPORTING
+     DYLANG                     = 'S'
+     DYNAME                     = 'ZBARCOS'
+     DYNUMB                     = '9000'
+*     REQUEST                    = ' '
+*   IMPORTING
+*     HEADER                     =
+    TABLES
+      ftab                       = T_MAPA
+*   EXCEPTIONS
+*     DYLANGUAGE_INVALID         = 1
+*     DYLANGUAGE_NOT_INST        = 2
+*     DYNAME_INVALID             = 3
+*     DYNPROLOAD_NOT_FOUND       = 4
+*     DYNUMB_INVALID             = 5
+*     FTAB_INVALID               = 6
+*     HEADER_INVALID             = 7
+*     INTERNAL_ERROR             = 8
+*     NO_DYNPRO                  = 9
+*     NO_FTAB_ROW                = 10
+*     NO_MEMORY                  = 11
+*     REQUEST_INVALID            = 12
+*     OTHERS                     = 13
+            .
+  IF sy-subrc <> 0.
+*   MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*           WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+*
+  LOOP AT T_MAPA.
+    T_MAPA_P-NOM    =   T_MAPA-FNAM.
+    MOVE T_MAPA-LINE  TO  T_MAPA_P-LIN .
+    MOVE T_MAPA-COLN  TO  T_MAPA_P-COL .
+    MOVE T_MAPA-LENG  TO  T_MAPA_P-LEN .
+    T_MAPA_P-TOT    =  T_MAPA_P-COL   +   2 .
+    APPEND T_MAPA_P.
+  ENDLOOP.
+*  Se eliminan las lineas que no pertenecen al cuadro de batalla
+  DELETE T_MAPA_P WHERE   LIN  <  4    OR
+                          LIN  > 22.
+ENDIF.
+*
+endform.                    " BUSCAR_POSICION
+*&---------------------------------------------------------------------*
+*&      Form  BORRAR_BARCOS
+*&---------------------------------------------------------------------*
+*       Se borran los datos de los barcos que se han puesto en el table
+*   ro
+*----------------------------------------------------------------------*
+*
+form BORRAR_BARCOS.
+*
+IF PARTIDA <> 'S'.
+  CLEAR:
+      P0101, P0102, P0103, P0104, P0105, P0106,
+      P0107, P0108, P0109, P0110, P0111, P0112,
+      P0113, P0114, P0115, P0116, P0117, P0118,
+      P0119,
+
+      P0201, P0202, P0203, P0204, P0205, P0206,
+      P0207, P0208, P0209, P0210, P0211, P0212,
+      P0213, P0214, P0215, P0216, P0217, P0218,
+      P0219,
+
+      P0301, P0302, P0303, P0304, P0305, P0306,
+      P0307, P0308, P0309, P0310, P0311, P0312,
+      P0313, P0314, P0315, P0316, P0317, P0318,
+      P0319,
+
+      P0401, P0402, P0403, P0404, P0405, P0406,
+      P0407, P0408, P0409, P0410, P0411, P0412,
+      P0413, P0414, P0415, P0416, P0417, P0418,
+      P0419,
+
+      P0501, P0502, P0503, P0504, P0505, P0506,
+      P0507, P0508, P0509, P0510, P0511, P0512,
+      P0513, P0514, P0515, P0516, P0517, P0518,
+      P0519,
+
+      P0601, P0602, P0603, P0604, P0605, P0606,
+      P0607, P0608, P0609, P0610, P0611, P0612,
+      P0613, P0614, P0615, P0616, P0617, P0618,
+      P0619,
+
+      P0701, P0702, P0703, P0704, P0705, P0706,
+      P0707, P0708, P0709, P0710, P0711, P0712,
+      P0713, P0714, P0715, P0716, P0717, P0718,
+      P0719,
+
+      P0801, P0802, P0803, P0804, P0805, P0806,
+      P0807, P0808, P0809, P0810, P0811, P0812,
+      P0813, P0814, P0815, P0816, P0817, P0818,
+      P0819,
+
+      P0901, P0902, P0903, P0904, P0905, P0906,
+      P0907, P0908, P0909, P0910, P0911, P0912,
+      P0913, P0914, P0915, P0916, P0917, P0918,
+      P0919,
+
+      P1001, P1002, P1003, P1004, P1005, P1006,
+      P1007, P1008, P1009, P1010, P1011, P1012,
+      P1013, P1014, P1015, P1016, P1017, P1018,
+      P1019,
+
+      P1101, P1102, P1103, P1104, P1105, P1106,
+      P1107, P1108, P1109, P1110, P1111, P1112,
+      P1113, P1114, P1115, P1116, P1117, P1118,
+      P1119,
+
+      P1201, P1202, P1203, P1204, P1205, P1206,
+      P1207, P1208, P1209, P1210, P1211, P1212,
+      P1213, P1214, P1215, P1216, P1217, P1218,
+      P1219,
+
+      P1301, P1302, P1303, P1304, P1305, P1306,
+      P1307, P1308, P1309, P1310, P1311, P1312,
+      P1313, P1314, P1315, P1316, P1317, P1318,
+      P1319,
+
+      P1401, P1402, P1403, P1404, P1405, P1406,
+      P1407, P1408, P1409, P1410, P1411, P1412,
+      P1413, P1414, P1415, P1416, P1417, P1418,
+      P1419,
+
+      P1501, P1502, P1503, P1504, P1505, P1506,
+      P1507, P1508, P1509, P1510, P1511, P1512,
+      P1513, P1514, P1515, P1516, P1517, P1518,
+      P1519,
+
+      P1601, P1602, P1603, P1604, P1605, P1606,
+      P1607, P1608, P1609, P1610, P1611, P1612,
+      P1613, P1614, P1615, P1616, P1617, P1618,
+      P1619,
+
+      P1701, P1702, P1703, P1704, P1705, P1706,
+      P1707, P1708, P1709, P1710, P1711, P1712,
+      P1713, P1714, P1715, P1716, P1717, P1718,
+      P1719,
+
+      P1801, P1802, P1803, P1804, P1805, P1806,
+      P1807, P1808, P1809, P1810, P1811, P1812,
+      P1813, P1814, P1815, P1816, P1817, P1818,
+      P1819,
+
+      P1901, P1902, P1903, P1904, P1905, P1906,
+      P1907, P1908, P1909, P1910, P1911, P1912,
+      P1913, P1914, P1915, P1916, P1917, P1918,
+      P1919,
+
+      B0101, B0102, B0103, B0104, B0105, B0106,
+      B0107, B0108, B0109, B0110, B0111, B0112,
+      B0113, B0114, B0115, B0116, B0117, B0118,
+      B0119,
+
+      B0201, B0202, B0203, B0204, B0205, B0206,
+      B0207, B0208, B0209, B0210, B0211, B0212,
+      B0213, B0214, B0215, B0216, B0217, B0218,
+      B0219,
+
+      B0301, B0302, B0303, B0304, B0305, B0306,
+      B0307, B0308, B0309, B0310, B0311, B0312,
+      B0313, B0314, B0315, B0316, B0317, B0318,
+      B0319,
+
+      B0401, B0402, B0403, B0404, B0405, B0406,
+      B0407, B0408, B0409, B0410, B0411, B0412,
+      B0413, B0414, B0415, B0416, B0417, B0418,
+      B0419,
+
+      B0501, B0502, B0503, B0504, B0505, B0506,
+      B0507, B0508, B0509, B0510, B0511, B0512,
+      B0513, B0514, B0515, B0516, B0517, B0518,
+      B0519,
+
+      B0601, B0602, B0603, B0604, B0605, B0606,
+      B0607, B0608, B0609, B0610, B0611, B0612,
+      B0613, B0614, B0615, B0616, B0617, B0618,
+      B0619,
+
+      B0701, B0702, B0703, B0704, B0705, B0706,
+      B0707, B0708, B0709, B0710, B0711, B0712,
+      B0713, B0714, B0715, B0716, B0717, B0718,
+      B0719,
+
+      B0801, B0802, B0803, B0804, B0805, B0806,
+      B0807, B0808, B0809, B0810, B0811, B0812,
+      B0813, B0814, B0815, B0816, B0817, B0818,
+      B0819,
+
+      B0901, B0902, B0903, B0904, B0905, B0906,
+      B0907, B0908, B0909, B0910, B0911, B0912,
+      B0913, B0914, B0915, B0916, B0917, B0918,
+      B0919,
+
+      B1001, B1002, B1003, B1004, B1005, B1006,
+      B1007, B1008, B1009, B1010, B1011, B1012,
+      B1013, B1014, B1015, B1016, B1017, B1018,
+      B1019,
+
+      B1101, B1102, B1103, B1104, B1105, B1106,
+      B1107, B1108, B1109, B1110, B1111, B1112,
+      B1113, B1114, B1115, B1116, B1117, B1118,
+      B1119,
+
+      B1201, B1202, B1203, B1204, B1205, B1206,
+      B1207, B1208, B1209, B1210, B1211, B1212,
+      B1213, B1214, B1215, B1216, B1217, B1218,
+      B1219,
+
+      B1301, B1302, B1303, B1304, B1305, B1306,
+      B1307, B1308, B1309, B1310, B1311, B1312,
+      B1313, B1314, B1315, B1316, B1317, B1318,
+      B1319,
+
+      B1401, B1402, B1403, B1404, B1405, B1406,
+      B1407, B1408, B1409, B1410, B1411, B1412,
+      B1413, B1414, B1415, B1416, B1417, B1418,
+      B1419,
+
+      B1501, B1502, B1503, B1504, B1505, B1506,
+      B1507, B1508, B1509, B1510, B1511, B1512,
+      B1513, B1514, B1515, B1516, B1517, B1518,
+      B1519,
+
+      B1601, B1602, B1603, B1604, B1605, B1606,
+      B1607, B1608, B1609, B1610, B1611, B1612,
+      B1613, B1614, B1615, B1616, B1617, B1618,
+      B1619,
+
+      B1701, B1702, B1703, B1704, B1705, B1706,
+      B1707, B1708, B1709, B1710, B1711, B1712,
+      B1713, B1714, B1715, B1716, B1717, B1718,
+      B1719,
+
+      B1801, B1802, B1803, B1804, B1805, B1806,
+      B1807, B1808, B1809, B1810, B1811, B1812,
+      B1813, B1814, B1815, B1816, B1817, B1818,
+      B1819,
+
+      B1901, B1902, B1903, B1904, B1905, B1906,
+      B1907, B1908, B1909, B1910, B1911, B1912,
+      B1913, B1914, B1915, B1916, B1917, B1918,
+      B1919.
+ELSE.
+  MESSAGE W897(SD) WITH
+      'Partida comenzada, no se pueden borrar los barcos'.
+ENDIF.
+*
+endform.                    " BORRAR_BARCOS
+*&---------------------------------------------------------------------*
+*&      Form  BORRAR_PARTIDA
+*&---------------------------------------------------------------------*
+*       Se eliminan todas las tablas de la partida
+*----------------------------------------------------------------------*
+*
+form BORRAR_PARTIDA.
+*
+DELETE FROM zbarcos_da
+    where  usu1    =     jug2     and
+           usu2    =     jug1     and
+           iden    =     iden     and
+           fech    =     sy-datum .
+DELETE FROM zbarcos_da
+    where  usu1    =     jug1     and
+           usu2    =     jug2     and
+           iden    =     iden     and
+           fech    =     sy-datum .
+DELETE FROM zbarcos_ju
+    where  usu1    =     jug2     and
+           usu2    =     jug1     and
+           iden    =     iden     and
+           fech    =     sy-datum .
+DELETE FROM zbarcos_ju
+    where  usu1    =     jug1     and
+           usu2    =     jug2     and
+           iden    =     iden     and
+           fech    =     sy-datum .
+
+commit work and wait.
+
+TEX_MEN   =  'Partida borrada por contrario'.
+PERFORM MANDAR_MENSAJE.
+CLEAR: PARTIDA, TEX_MEN.
+
+IF OKCODE <>  'FINALIZAR' AND  OKCODE <>  'F_ATRAS'     AND
+   OKCODE <>  'CANCEL'    AND  OKCODE <>  'F_CANCEL'    AND
+   OKCODE <>  'BACK'      AND  OKCODE <>  'F_VOLVER' .
+  LEAVE TO TRANSACTION 'ZBARCOS'.
+ENDIF.
+*
+endform.                    " BORRAR_PARTIDA
+*&---------------------------------------------------------------------*
+*&      Form  DIBUJAR_POSICION
+*&---------------------------------------------------------------------*
+*       Se dibuja la pantalla de los barcos
+*----------------------------------------------------------------------*
+*
+form DIBUJAR_POSICION.
+*
+  CLEAR ERROR.
+
+  COL_P   =   SY-CUCOL.
+  LIN_P   =   SY-CUROW.
+*
+  LOOP AT T_MAPA_P  WHERE LIN   =  LIN_P  AND
+                          COL  LE  COL_P  AND
+                          TOT  GE  COL_P .
+  ENDLOOP.
+  IF SY-SUBRC NE 0.
+    MESSAGE W897(SD) WITH 'Posición marcada no valida'.
+    ERROR = 'S'.
+    EXIT.
+  ELSE.
+    ASSIGN (T_MAPA_P-NOM)  TO  <F_POS> .
+  ENDIF.
+
+  CASE PARTIDA.
+    WHEN 'S'.
+      IF T_MAPA_P-NOM+0(1) = 'P'.
+        MESSAGE W897(SD) WITH 'Posición marcada no valida'.
+        ERROR = 'S'.
+        exit.
+      ENDIF.
+      PERFORM CHEQUEAR_POS_BATALLA.
+      PERFORM REVISAR_VICTORIA.
+    WHEN ' '.
+      IF T_MAPA_P-NOM+0(1) = 'B'.
+        MESSAGE W897(SD) WITH 'Posición marcada no valida'.
+        ERROR = 'S'.
+        exit.
+      ENDIF.
+      IF <F_POS> IS INITIAL.
+        WRITE ICON_WS_SHIP TO  <F_POS>  AS ICON  .
+      ELSE.
+        CLEAR <F_POS>.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+*
+endform.                    " DIBUJAR_POSICION
+*&---------------------------------------------------------------------*
+*&      Form  VALIDAR_BARCOS
+*&---------------------------------------------------------------------*
+*       Validamos la colocacion de los barcos.
+*     1  DE 5
+*     2  DE 4
+*     5  DE 3
+*     8  DE 2
+*     10 DE 1
+*----------------------------------------------------------------------*
+*
+form VALIDAR_BARCOS.
+*
+DATA: RETORNO,
+      ENCU_1, ENCU_2, ENCU_3, ENCU_4, ENCU_5, ENCU_6, ENCU_7, ENCU_8,
+      LIN_AUX(2)    type   N,
+      COL_AUX(2)    type   N,
+      LIN_A(2)      type   N,
+      COL_A(2)      type   N.
+*
+clear: cont_1, cont_2, cont_3, cont_4, cont_5, ERROR, T_BARCO.
+*
+sort t_coloca by LIN COL.
+T_COL_A[]   =  T_COLOCA[].
+
+LOOP AT T_COLOCA  WHERE MAR = 'X'  AND
+                        REV = ' '.
+
+  LIN_AUX  =  LIN_A  =  T_COLOCA-LIN.
+  COL_AUX  =  COL_A  =  T_COLOCA-COL.
+  T_BARCO = 1.    " Barco de 1 posicion.
+  clear: ENCU_1, ENCU_2, ENCU_3, ENCU_4, ENCU_5, ENCU_6, ENCU_7, ENCU_8.
+
+*  Vamos a buscar  H+
+  CLEAR  RETORNO.
+
+  PERFORM BUSCAR_HMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_1 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  H-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_HMENOS USING  LIN_AUX  COL_AUX
+                        CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_2 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  V+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_VMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_3 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  V-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_VMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_4 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  D+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_DMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_5 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  D-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_DMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_6 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  I+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_IMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_7 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  I-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_IMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_8 = 'S'.
+  ENDIF.
+
+ READ TABLE T_COLOCA WITH KEY LIN  =  LIN_A
+                              COL  =  COL_A.
+ IF ( ENCU_1 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_2 = 'S' AND ( ENCU_1 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_3 = 'S' AND ( ENCU_2 = 'S' OR ENCU_1 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_4 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_1 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_5 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_1 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_6 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_1 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_7 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_1 = 'S' OR
+                         ENCU_8 = 'S' ) ) OR
+    ( ENCU_8 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S' OR
+                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S' OR
+                         ENCU_1 = 'S' ) ).
+   MESSAGE S897(SD) WITH 'Barcos juntos NO permitido'.
+   ERROR = 'S'.
+   EXIT.
+ ENDIF.
+
+*   Asignamos el tipo de barco al que pertenece.
+  CASE T_BARCO.
+    WHEN TB_1.
+      ADD 1 TO cont_1.
+    WHEN TB_2.
+      ADD 1 TO cont_2.
+    WHEN TB_3.
+      ADD 1 TO cont_3.
+    WHEN TB_4.
+      ADD 1 TO cont_4.
+    WHEN TB_5.
+      ADD 1 TO cont_5.
+    WHEN OTHERS.
+     MESSAGE S897(SD) WITH 'Barco no permitido'.
+     ERROR = 'S'.
+     EXIT.
+  ENDCASE.
+  T_COLOCA-REV  = 'X'.
+  MODIFY T_COLOCA.
+ENDLOOP.
+
+CONCATENATE CONT_1 ' DE 1 POS' INTO B1.
+CONCATENATE CONT_2 ' DE 2 POS' INTO B2.
+CONCATENATE CONT_3 ' DE 3 POS' INTO B3.
+CONCATENATE CONT_4 ' DE 4 POS' INTO B4.
+CONCATENATE CONT_5 ' DE 5 POS' INTO B5.
+
+CONCATENATE CONT_1 ' DE 1 POS' INTO B11.
+CONCATENATE CONT_2 ' DE 2 POS' INTO B21.
+CONCATENATE CONT_3 ' DE 3 POS' INTO B31.
+CONCATENATE CONT_4 ' DE 4 POS' INTO B41.
+CONCATENATE CONT_5 ' DE 5 POS' INTO B51.
+
+IF ERROR = 'S'.
+  EXIT.
+ENDIF.
+*
+IF CONT_1 <> C_10  OR  CONT_2 <> C_8  OR  CONT_3 <> C_5 OR
+   CONT_4 <> C_2   OR  CONT_5 <> C_1.
+   MESSAGE S897(SD) WITH 'Número de barcos erróneo'.
+   ERROR = 'S'.
+ENDIF.
+*
+endform.                    " VALIDAR_BARCOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  VALIDAR_BARCOS2
+*&---------------------------------------------------------------------*
+*       Validamos los barcos que se han hundido.
+*     1  DE 5
+*     2  DE 4
+*     5  DE 3
+*     8  DE 2
+*     10 DE 1
+*----------------------------------------------------------------------*
+*
+form VALIDAR_BARCOS2.
+*
+DATA: RETORNO,
+      ENCU_1, ENCU_2, ENCU_3, ENCU_4, ENCU_5, ENCU_6, ENCU_7, ENCU_8,
+      LIN_AUX(2)    type   N,
+      COL_AUX(2)    type   N,
+      LIN_A(2)      type   N,
+      COL_A(2)      type   N.
+*
+clear: C_B11, C_B21, C_B31, C_B41, C_B51, ERROR, T_BARCO.
+*
+*  Vemos todos los barcos dados.
+free: t_coloca2.
+*
+select line colu marc  from zbarcos_da into  (t_coloca2-lin,
+                                              t_coloca2-col,
+                                              t_coloca2-mar)
+              where  usu1    =     jug2     and
+                     usu2    =     jug1     and
+                     iden    =     iden     and
+                     fech    =     sy-datum and
+                     marc    =     'X'      and
+                     dado    =     'X'.
+  append t_coloca2.
+endselect.
+*
+sort t_coloca2 by LIN COL.
+T_COL_A[]   =  T_COLOCA2[].
+
+LOOP AT T_COLOCA2  WHERE MAR = 'X'  AND
+                        REV = ' '.
+
+  LIN_AUX  =  LIN_A  =  T_COLOCA2-LIN.
+  COL_AUX  =  COL_A  =  T_COLOCA2-COL.
+  T_BARCO = 1.    " Barco de 1 posicion.
+  clear: ENCU_1, ENCU_2, ENCU_3, ENCU_4, ENCU_5, ENCU_6, ENCU_7, ENCU_8.
+
+*  Vamos a buscar  H+
+  CLEAR  RETORNO.
+
+  PERFORM BUSCAR_HMAS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_1 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  H-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_HMENOS2 USING  LIN_AUX  COL_AUX
+                        CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_2 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  V+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_VMAS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_3 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  V-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_VMENOS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_4 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  D+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_DMAS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_5 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  D-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_DMENOS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_6 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  I+
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_IMAS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_7 = 'S'.
+  ENDIF.
+
+*  Vamos a buscar  I-
+  CLEAR  RETORNO.
+
+  LIN_AUX  =  LIN_A .
+  COL_AUX  =  COL_A .
+
+  PERFORM BUSCAR_IMENOS2 USING  LIN_AUX  COL_AUX
+                      CHANGING  RETORNO.
+  IF RETORNO = 'E'.
+    ENCU_8 = 'S'.
+  ENDIF.
+
+* READ TABLE T_COLOCA2 WITH KEY LIN  =  LIN_A
+*                               COL  =  COL_A.
+* IF ( ENCU_1 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_2 = 'S' AND ( ENCU_1 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_3 = 'S' AND ( ENCU_2 = 'S' OR ENCU_1 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_4 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_1 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_5 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_1 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_6 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_1 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_7 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_1 = 'S'
+*OR
+*                         ENCU_8 = 'S' ) ) OR
+*    ( ENCU_8 = 'S' AND ( ENCU_2 = 'S' OR ENCU_3 = 'S' OR ENCU_4 = 'S'
+*OR
+*                         ENCU_5 = 'S' OR ENCU_6 = 'S' OR ENCU_7 = 'S'
+*OR
+*                         ENCU_1 = 'S' ) ).
+*   MESSAGE S897(SD) WITH 'Barcos juntos NO permitido'.
+*   ERROR = 'S'.
+*   EXIT.
+* ENDIF.
+
+*   Asignamos el tipo de barco al que pertenece.
+  CASE T_BARCO.
+    WHEN TB_1.
+      ADD 1 TO C_B11.
+    WHEN TB_2.
+      ADD 1 TO C_B21.
+    WHEN TB_3.
+      ADD 1 TO C_B31.
+    WHEN TB_4.
+      ADD 1 TO C_B41.
+    WHEN TB_5.
+      ADD 1 TO C_B51.
+    WHEN OTHERS.
+     MESSAGE S897(SD) WITH 'Barco no permitido'.
+     ERROR = 'S'.
+     EXIT.
+  ENDCASE.
+  T_COLOCA-REV  = 'X'.
+  MODIFY T_COLOCA2.
+ENDLOOP.
+
+IF HUNDIDO = 'S'.
+  T_B11    =   CONT_1   -   C_B11.
+  T_B21    =   CONT_2   -   C_B21.
+  T_B31    =   CONT_3   -   C_B31.
+  T_B41    =   CONT_4   -   C_B41.
+  T_B51    =   CONT_5   -   C_B51.
+
+  CONCATENATE T_B11 ' DE 1 POS' INTO B11.
+  CONCATENATE T_B21 ' DE 2 POS' INTO B21.
+  CONCATENATE T_B31 ' DE 3 POS' INTO B31.
+  CONCATENATE T_B41 ' DE 4 POS' INTO B41.
+  CONCATENATE T_B51 ' DE 5 POS' INTO B51.
+ENDIF.
+
+IF ERROR = 'S'.
+  EXIT.
+ENDIF.
+*
+*IF CONT_1 <> C_10  OR  CONT_2 <> C_8  OR  CONT_3 <> C_5 OR
+*   CONT_4 <> C_2   OR  CONT_5 <> C_1.
+*   MESSAGE S897(SD) WITH 'Número de barcos erróneo'.
+*   ERROR = 'S'.
+*ENDIF.
+*
+endform.                    " VALIDAR_BARCOS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HMAS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_HMAS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_HMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H- esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HMENOS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT  1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_HMENOS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_HMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VMAS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_VMAS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_VMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VMENOS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_VMENOS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_VMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DMAS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  ADD 1 TO P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN GT 19  OR
+     P_T_COLOCA_COL GT 19  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_DMAS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_DMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DMENOS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM  P_T_COLOCA_LIN.
+  SUBTRACT 1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN LT 1  OR
+     P_T_COLOCA_COL LT 1  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_DMENOS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_DMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion I+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IMAS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  ADD 1      TO   P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN LT 1   OR
+     P_T_COLOCA_COL GT 19  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_IMAS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_IMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion I+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IMENOS using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD      1 TO    P_T_COLOCA_LIN.
+  SUBTRACT 1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN GT 19   OR
+     P_T_COLOCA_COL LT 1   .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_IMENOS USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_IMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HMAS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HMAS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_HMAS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_HMAS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HMENOS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H- esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HMENOS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT  1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_HMENOS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_HMENOS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VMAS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VMAS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_VMAS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_VMAS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VMENOS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VMENOS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_VMENOS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_VMENOS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DMAS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DMAS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  ADD 1 TO P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN GT 19  OR
+     P_T_COLOCA_COL GT 19  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_DMAS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_DMAS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DMENOS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion V+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DMENOS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM  P_T_COLOCA_LIN.
+  SUBTRACT 1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN LT 1  OR
+     P_T_COLOCA_COL LT 1  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_DMENOS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_DMENOS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IMAS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion I+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IMAS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  ADD 1      TO   P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN LT 1   OR
+     P_T_COLOCA_COL GT 19  .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_IMAS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_IMAS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IMENOS2
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion I+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IMENOS2 using    p_t_coloca_lin
+                          p_t_coloca_col
+              changing p_retorno.
+*
+  ADD      1 TO    P_T_COLOCA_LIN.
+  SUBTRACT 1 FROM  P_T_COLOCA_COL.
+  IF P_T_COLOCA_LIN GT 19   OR
+     P_T_COLOCA_COL LT 1   .
+    EXIT.
+  ENDIF.
+  READ TABLE T_COL_A WITH KEY  LIN  =  P_T_COLOCA_LIN
+                               COL  =  P_T_COLOCA_COL
+                               MAR  =  'X'.
+  IF SY-SUBRC = 0.
+    T_COL_A-REV    =   'X'.
+    MODIFY T_COLOCA2 FROM T_COL_A TRANSPORTING REV
+                            WHERE LIN  =  P_T_COLOCA_LIN  AND
+                                  COL  =  P_T_COLOCA_COL  AND
+                                  MAR  =  'X'.
+    P_RETORNO = 'E' .         "  Encontrado.
+    ADD 1 TO T_BARCO.
+    PERFORM BUSCAR_IMENOS2 USING  P_T_COLOCA_LIN  P_T_COLOCA_COL
+                        CHANGING P_RETORNO.
+  ENDIF.
+*
+endform.                    " BUSCAR_IMENOS2
+*
+*&---------------------------------------------------------------------*
+*&      Form  CHEQUEAR_POS_BATALLA
+*&---------------------------------------------------------------------*
+*       Vemos ya la posicion del contrario y colocamos agua o barco.
+*   también vemos lo que ha pasado con nuestro barcos, despues del ata-
+*   que del contrario.
+*----------------------------------------------------------------------*
+*
+form CHEQUEAR_POS_BATALLA.
+*
+data: begin of wa_JUG.
+       include structure zbarcos_ju.
+data: end   of wa_JUG.
+*
+select single * from zbarcos_da into zbarcos_da
+                             where  usu1    =     jug2    and
+                                    usu2    =     jug1    and
+                                    iden    =     iden    and
+                                    fech    =     sy-datum.
+if sy-subrc ne 0.
+   MESSAGE S897(SD) WITH
+       'Contrario no ha colocado los barcos o iden. erróneo'.
+   exit.
+endif.
+
+CLEAR: ZBARCOS_JU, error.
+
+SELECT * FROM ZBARCOS_JU  INTO ZBARCOS_JU UP TO 1 ROWS
+                             where ( usu1  =   jug2   AND
+                                     usu2  =   jug1  )  OR
+                                   ( usu1  =   jug1   AND
+                                     usu2  =   jug2  )  and
+                                    iden    =     iden  and
+                                    fech    =     sy-datum
+                             ORDER BY CONT DESCENDING.
+ENDSELECT.
+
+if sy-subrc ne 0.    "   Nadie a colocado.
+  PERFORM BLOQUEAR_JUGADA.
+endif.
+
+IF ERROR = ' '.
+IF ( ZBARCOS_JU-MARC  NE  'X' AND
+     ZBARCOS_JU-USU1  =   JUG2 )  OR   " Agua del otro, me toca
+   ( ZBARCOS_JU-USU1  =   JUG1 AND
+     ZBARCOS_JU-MARC  =   'X'  )  OR   " Le he dado, me toca de nuevo
+     ZBARCOS_JU IS INITIAL.            " Nadie ha marcado.
+
+  WA_JUG-MANDT    =    SY-MANDT.
+  WA_JUG-USU1     =    JUG1.
+  WA_JUG-USU2     =    JUG2.
+  WA_JUG-IDEN     =    IDEN.
+  WA_JUG-FECH     =    SY-DATUM.
+  WA_JUG-CONT     =    ZBARCOS_JU-CONT   +   1 .
+
+  select single * from zbarcos_da into zbarcos_da
+                             where  usu1    =     jug2     and
+                                    usu2    =     jug1     and
+                                    iden    =     iden     and
+                                    fech    =     sy-datum and
+                                    line    =     T_MAPA_P-NOM+1(2)  AND
+                                    colu    =     T_MAPA_P-NOM+3(2)  AND
+                                    marc    =     'X'.
+  IF SY-SUBRC = 0.          " La tiene marcada como barco el contrario.
+    WA_JUG-MARC     =    'X' .
+    WRITE ICON_WS_SHIP             TO  <F_POS>  AS ICON  .
+  ELSE.
+    WA_JUG-MARC     =    ' ' .
+    WRITE ICON_TRANSFER_STRUCTURE  TO  <F_POS>  AS ICON  .
+    TEX_MEN   =  'Contrario dio en AGUA. Es Tu Turno'.
+    PERFORM MANDAR_MENSAJE.
+    CLEAR  TEX_MEN.
+  ENDIF.
+  UPDATE ZBARCOS_DA SET  DADO = 'X'
+       where  usu1    =     jug2     and
+              usu2    =     jug1     and
+              iden    =     iden     and
+              fech    =     sy-datum and
+              line    =     T_MAPA_P-NOM+1(2)  AND
+              colu    =     T_MAPA_P-NOM+3(2) .
+  INSERT INTO ZBARCOS_JU VALUES WA_JUG.
+  COMMIT WORK AND WAIT.
+  IF WA_JUG-MARC  =  'X'.        " He dado a un barco.
+    LINEA   =  T_MAPA_P-NOM+1(2) .
+    COLUM   =  T_MAPA_P-NOM+3(2).
+    PERFORM CHEQUEO_POS_BARCO_DADO USING LINEA COLUM.
+    IF HUNDIDO = 'S'.
+      MESSAGE S897(SD) WITH 'BARCO HUNDIDO'.
+    ELSE.
+      MESSAGE S897(SD) WITH 'BARCO TOCADO'.
+    ENDIF.
+  ENDIF.
+ELSE.
+  MESSAGE S897(SD) WITH 'Es el turno del contrario, no puede marcar'.
+ENDIF.
+*
+PERFORM DESBLOQUEAR_JUGADA.
+ENDIF.              " Del error.
+*
+endform.                    " CHEQUEAR_POS_BATALLA
+*&---------------------------------------------------------------------*
+*&      Form  borrar_partidas_anteriores
+*&---------------------------------------------------------------------*
+*      Se borran las partidas con un margen de dos dias.
+*----------------------------------------------------------------------*
+*
+form borrar_partidas_anteriores.
+*
+DATA: FECHA LIKE SY-DATUM.
+
+FECHA = SY-DATUM.
+
+CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+  EXPORTING
+    date            = FECHA
+    days            = 2
+    months          = 0
+   SIGNUM          = '-'
+    years           = 0
+ IMPORTING
+    CALC_DATE       = FECHA.
+*
+DELETE FROM ZBARCOS_DA
+       WHERE FECH LE FECHA.
+COMMIT WORK AND WAIT.
+*
+endform.                    " borrar_partidas_anteriores
+*&---------------------------------------------------------------------*
+*&      Form  REFRESCAR_PANTALLA
+*&---------------------------------------------------------------------*
+*       Refrescamos los datos de los barcos en pantalla.
+*----------------------------------------------------------------------*
+*
+form REFRESCAR_PANTALLA.
+*
+  " No se hace nada, porque automaticamente se realiza esto en el PBO.
+*
+endform.                    " REFRESCAR_PANTALLA
+*&---------------------------------------------------------------------*
+*&      Form  CHEQUEO_POS_BARCO_DADO
+*&---------------------------------------------------------------------*
+*       Chequeamos las posiciones del barco, por si es de más de una y
+*   no esta hundido, para poder mandar el mensaje correspondiente.
+*----------------------------------------------------------------------*
+*
+form CHEQUEO_POS_BARCO_DADO USING P_LINEA P_COLUM.
+*
+DATA: POSICION(5) ,
+      LIN_AUX(2)    type   N,
+      COL_AUX(2)    type   N,
+      CONT(1)       TYPE   N.
+*
+FREE:  T_HUN_DA ,   T_HUN .
+CLEAR:  T_HUN_DA ,   T_HUN ,  CONT.
+HUNDIDO = 'S'.
+*
+*    Obtencion de los datos de la pantalla del contrario.
+*
+SELECT * FROM ZBARCOS_DA APPENDING CORRESPONDING
+                        FIELDS OF TABLE T_HUN_DA
+                        WHERE  USU1   =   JUG2   AND
+                               USU2   =   JUG1   AND
+                               IDEN   =   IDEN   AND
+                               FECH   =   SY-DATUM.
+*
+  LIN_AUX  =  T_HUN-LIN  =  P_LINEA.
+  COL_AUX  =  T_HUN-COL  =  P_COLUM.
+  T_HUN-MAR  =  'X'.
+  APPEND  T_HUN.
+  CLEAR   T_HUN.
+
+*  Vamos a buscar  H+
+
+  PERFORM BUSCAR_HBMAS USING  LIN_AUX  COL_AUX
+                       CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  H-
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_HBMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  V+
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_VBMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  V-
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_VBMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  D+
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_DBMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  D-
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_DBMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  I+
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_IBMAS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+
+*  Vamos a buscar  I-
+
+  LIN_AUX  =  P_LINEA.
+  COL_AUX  =  P_COLUM.
+
+  PERFORM BUSCAR_IBMENOS USING  LIN_AUX  COL_AUX
+                      CHANGING  HUNDIDO.
+  IF HUNDIDO  =  'N'.
+    EXIT.
+  ENDIF.
+*
+*   Si ha llegado hasta aqui, es que el barco esta un poco hundido.
+*
+  LOOP AT T_HUN.      " Posiciones del barco hundido.
+    CLEAR CONT.
+    DO 8 TIMES.
+      CONT =  CONT  +  1.
+
+      IF CONT = 1.
+        SUBTRACT 1 FROM T_HUN-LIN.
+      ELSEIF CONT = 2.
+        ADD 2 TO T_HUN-LIN.
+      ELSEIF CONT = 3.
+        SUBTRACT 1 FROM T_HUN-LIN.
+        SUBTRACT 1 FROM T_HUN-COL.
+      ELSEIF CONT = 4.
+        ADD 2 TO T_HUN-COL.
+      ELSEIF CONT = 5.
+        ADD 1 TO T_HUN-LIN.
+      ELSEIF CONT = 6.
+        SUBTRACT 2 FROM T_HUN-LIN.
+      ELSEIF CONT = 7.
+        SUBTRACT 2 FROM T_HUN-COL.
+      ELSEIF CONT = 8.
+        ADD 2 TO T_HUN-LIN.
+      ENDIF.
+
+      READ TABLE T_HUN_DA WITH KEY  LINE  =  T_HUN-LIN
+                                    COLU  =  T_HUN-COL
+                                    MARC  =  ' '.
+      IF SY-SUBRC = 0.
+        CONCATENATE 'B' T_HUN-LIN T_HUN-COL INTO POSICION.
+        ASSIGN (POSICION)  TO  <F_POS> .
+        WRITE ICON_TRANSFER_STRUCTURE  TO  <F_POS>  AS ICON  .
+        UPDATE ZBARCOS_DA SET  DADO = 'X'
+           where  usu1    =     jug2       and
+                  usu2    =     jug1       and
+                  iden    =     iden       and
+                  fech    =     sy-datum   and
+                  line    =     T_HUN-LIN  AND
+                  colu    =     T_HUN-COL  .
+
+      ENDIF.
+    ENDDO.
+  ENDLOOP.
+  COMMIT WORK AND WAIT.
+*
+endform.                    " CHEQUEO_POS_BARCO_DADO
+*&---------------------------------------------------------------------*
+*&      Form  BLOQUEAR_JUGADA
+*&---------------------------------------------------------------------*
+*      Se bloquea la tabla de las jugadas, para que el otro no tenga
+*  posibilidad de jugar.
+*----------------------------------------------------------------------*
+*
+form BLOQUEAR_JUGADA.
+*
+CALL FUNCTION 'ENQUEUE_EZ_ZBARCOS_JU'
+ EXPORTING
+   MODE_ZBARCOS_JU       = 'S'
+   MANDT                 = SY-MANDT
+   USU1                  = jug1
+   USU2                  = jug2
+   IDEN                  = iden
+   FECH                  = sy-datum
+*   CONT                  =
+*   X_USU1                = ' '
+*   X_USU2                = ' '
+*   X_IDEN                = ' '
+*   X_FECH                = ' '
+*   X_CONT                = ' '
+*   _SCOPE                = '2'
+*   _WAIT                 = ' '
+*   _COLLECT              = ' '
+ EXCEPTIONS
+   FOREIGN_LOCK          = 1
+   SYSTEM_FAILURE        = 2
+   OTHERS                = 3
+          .
+IF sy-subrc <> 0.
+  MESSAGE S897(SD) WITH 'Es el turno del contrario, no puede marcar'.
+  ERROR = 'S'.
+ENDIF.
+
+CALL FUNCTION 'ENQUEUE_EZ_ZBARCOS_JU'
+ EXPORTING
+   MODE_ZBARCOS_JU       = 'S'
+   MANDT                 = SY-MANDT
+   USU1                  = jug2
+   USU2                  = jug1
+   IDEN                  = iden
+   FECH                  = sy-datum
+*   CONT                  =
+*   X_USU1                = ' '
+*   X_USU2                = ' '
+*   X_IDEN                = ' '
+*   X_FECH                = ' '
+*   X_CONT                = ' '
+*   _SCOPE                = '2'
+*   _WAIT                 = ' '
+*   _COLLECT              = ' '
+ EXCEPTIONS
+   FOREIGN_LOCK          = 1
+   SYSTEM_FAILURE        = 2
+   OTHERS                = 3
+          .
+IF sy-subrc <> 0.
+  MESSAGE S897(SD) WITH 'Es el turno del contrario, no puede marcar'.
+  ERROR = 'S'.
+ENDIF.
+
+*
+endform.                    " BLOQUEAR_JUGADA
+*&---------------------------------------------------------------------*
+*&      Form  DESBLOQUEAR_JUGADA
+*&---------------------------------------------------------------------*
+*       Desbloqueamos la tabla, con los datos correctos.
+*----------------------------------------------------------------------*
+*
+form DESBLOQUEAR_JUGADA.
+*
+CALL FUNCTION 'DEQUEUE_EZ_ZBARCOS_JU'
+ EXPORTING
+   MODE_ZBARCOS_JU       = 'S'
+   MANDT                 = SY-MANDT
+   USU1                  = jug1
+   USU2                  = jug2
+   IDEN                  = iden
+   FECH                  = sy-datum    .
+
+CALL FUNCTION 'DEQUEUE_EZ_ZBARCOS_JU'
+ EXPORTING
+   MODE_ZBARCOS_JU       = 'S'
+   MANDT                 = SY-MANDT
+   USU1                  = jug2
+   USU2                  = jug1
+   IDEN                  = iden
+   FECH                  = sy-datum    .
+*
+endform.                    " DESBLOQUEAR_JUGADA
+*&---------------------------------------------------------------------*
+*&      Form  REVISAR_VICTORIA
+*&---------------------------------------------------------------------*
+*       Vemos si ha hundido todos los barcos
+*----------------------------------------------------------------------*
+*
+form REVISAR_VICTORIA.
+*
+  select single * into zbarcos_da from ZBARCOS_DA
+                              where  USU1  =  jug2      and
+                                     USU2  =  jug1      and
+                                     IDEN  =  IDEN      and
+                                     FECH  =  SY-DATUM  AND
+                                     MARC = 'X'         AND
+                                     DADO = ' '.
+  IF SY-SUBRC NE 0.      " Ha dado a todos los barcos.
+    TEX_MEN   =  'Su contrario le ha ganado.'.
+    PERFORM MANDAR_MENSAJE.
+    CLEAR  TEX_MEN.
+    MESSAGE I897(SD) WITH 'HA GANADO'.
+  ENDIF.
+*
+endform.                    " REVISAR_VICTORIA
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HBMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HBMAS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  ADD 1 TO P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_HBMAS USING    P_T_COLOCA_LIN  P_T_COLOCA_COL
+                           CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_HBMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_HBMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion H+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_HBMENOS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_COL.
+  IF P_T_COLOCA_COL LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_HBMENOS USING    P_T_COLOCA_LIN  P_T_COLOCA_COL
+                             CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_HBMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VBMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VBMAS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN GT 19.
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_VBMAS USING    P_T_COLOCA_LIN  P_T_COLOCA_COL
+                             CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_VBMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_VBMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_VBMENOS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  IF P_T_COLOCA_LIN LT 1.
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_VBMENOS USING    P_T_COLOCA_LIN  P_T_COLOCA_COL
+                             CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_VBMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DBMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DBMAS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  ADD 1 TO P_T_COLOCA_LIN.
+  ADD 1 TO P_T_COLOCA_COL.
+
+  IF P_T_COLOCA_LIN GT 19  OR
+     P_T_COLOCA_COL GT 19 .
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_DBMAS USING      P_T_COLOCA_LIN  P_T_COLOCA_COL
+                             CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_DBMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_DBMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_DBMENOS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  SUBTRACT 1 FROM P_T_COLOCA_COL.
+
+  IF P_T_COLOCA_LIN LT 1  OR
+     P_T_COLOCA_COL LT 1 .
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_DBMENOS USING      P_T_COLOCA_LIN  P_T_COLOCA_COL
+                               CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_DBMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IBMAS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IBMAS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_LIN.
+  ADD      1 TO   P_T_COLOCA_COL.
+
+  IF P_T_COLOCA_LIN LT 1  OR
+     P_T_COLOCA_COL GT 19 .
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_IBMAS USING      P_T_COLOCA_LIN  P_T_COLOCA_COL
+                               CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_IBMAS
+*
+*&---------------------------------------------------------------------*
+*&      Form  BUSCAR_IBMENOS
+*&---------------------------------------------------------------------*
+*       Vemos a ver si la posicion v+ esta rellena
+*----------------------------------------------------------------------*
+*      -->P_T_COLOCA_LIN  text
+*      -->P_T_COLOCA_COL  text
+*      <--P_RETORNO  text
+*----------------------------------------------------------------------*
+form BUSCAR_IBMENOS using    p_t_coloca_lin
+                           p_t_coloca_col
+                changing p_hundido.
+*
+  SUBTRACT 1 FROM P_T_COLOCA_COL.
+  ADD      1 TO   P_T_COLOCA_LIN.
+
+  IF P_T_COLOCA_COL LT 1  OR
+     P_T_COLOCA_LIN GT 19 .
+    EXIT.
+  ENDIF.
+  READ TABLE T_HUN_DA WITH KEY  LINE  =  P_T_COLOCA_LIN
+                                COLU  =  P_T_COLOCA_COL
+                                MARC  =  'X'.
+  IF SY-SUBRC = 0.
+    IF  T_HUN_DA-DADO  =  'X'.
+      T_HUN-LIN   =   P_T_COLOCA_LIN.
+      T_HUN-COL   =   P_T_COLOCA_COL.
+      T_HUN-MAR   =  'X'.
+      APPEND  T_HUN.
+      CLEAR   T_HUN.
+
+      PERFORM BUSCAR_IBMENOS USING      P_T_COLOCA_LIN  P_T_COLOCA_COL
+                               CHANGING P_HUNDIDO.
+    ELSE.
+      HUNDIDO = 'N'.     " No esta hundido.
+    ENDIF.
+  ENDIF.
+*
+endform.                    " BUSCAR_IBMENOS
+*
+*&---------------------------------------------------------------------*
+*&      Form  AYUDA_JUEGO
+*&---------------------------------------------------------------------*
+*      Se saca la documentacion del programa.
+*----------------------------------------------------------------------*
+*
+form AYUDA_JUEGO.
+*
+tables:  dokhl.
+data: txt_report     like  dokhl-object.
+*
+  TXT_REPORT = 'ZBARCOS'.
+  CALL FUNCTION 'ERGO_TEXT_SHOW'
+       EXPORTING
+            TEXTNAME       = TXT_REPORT
+            ID             = 'RE'
+            LANGU          = SY-LANGU
+       EXCEPTIONS
+            TEXT_NOT_FOUND = 01.
+*
+endform.                    " AYUDA_JUEGO

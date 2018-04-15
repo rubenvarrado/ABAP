@@ -1,0 +1,85 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZMMIGN_0010_TOP
+*&---------------------------------------------------------------------*
+
+tables: likp,ztmm_1233.
+TYPE-POOLS: SLIS, ICON.
+types: begin of tys_ztmm_1233,
+          ebeln	type ztmm_1233-ebeln,
+          sernr	type ztmm_1233-sernr,
+          ebelp	type ztmm_1233-ebelp,
+          matnr	type ztmm_1233-matnr,
+          werks	type ztmm_1233-werks,
+          lgort	type ztmm_1233-lgort,
+          idoc  type ztmm_1233-idoc,
+          erdat	type ztmm_1233-erdat,
+          erzet	type ztmm_1233-erzet,
+*          maktx type makt-maktx,
+       end of tys_ztmm_1233.
+types: begin of tys_alv,
+          tipoerr(1) type c,
+          vbeln type vbeln_vl,
+          ebeln type ztmm_1233-ebeln,
+          ebelp type ztmm_1233-ebelp,
+          matnr type ztmm_1233-matnr,
+          maktx type makt-maktx,
+          sernr type ztmm_1233-sernr,
+          textoerr(50) type c,
+       end of tys_alv.
+types: begin of tys_sernr,
+          sernr type ztmm_1233-sernr,
+       end of tys_sernr.
+types: begin of tys_matnr,
+          matnr type ztmm_1233-matnr,
+          maktx type makt-maktx,
+       end of tys_matnr.
+types: begin of tys_ekes,
+          ebeln type ztmm_1233-ebeln,
+          ebelp type ztmm_1233-ebelp,
+          vbeln type ekes-vbeln,
+       end of tys_ekes.
+
+*0180000383
+data: gs_sernr type tys_sernr.
+data: gt_sernr type table of tys_sernr.
+data: gs_ekes type tys_ekes.
+data: gt_ekes type table of tys_ekes.
+data: gs_sernr_tc type tys_sernr.
+data: gt_sernr_tc type table of tys_sernr.
+data: gs_sernr_bd type tys_sernr.
+data: gt_sernr_bd type table of tys_sernr.
+data: gs_ztmm_1233 type tys_ztmm_1233.
+data: gt_ztmm_1233 type table of tys_ztmm_1233.
+data: gs_alv type tys_alv.
+data: gt_alv type table of tys_alv.
+data: gs_matnr type tys_matnr.
+data: gt_matnr type table of tys_matnr.
+data: go_grid               TYPE REF TO cl_gui_alv_grid_ext,
+      go_container          TYPE REF TO cl_gui_custom_container,
+      gt_fieldcat TYPE LVC_T_FCAT.
+DATA: gv_repid LIKE sy-repid,
+      gv_ok_code TYPE sy-ucomm,
+      gv_linea_tc type i,
+      gv_linea_bd type i,
+      gv_todok type flag,
+      gv_err type flag.
+
+CONSTANTS: gc_e          TYPE c         VALUE 'E', " Constante para mensaje erróneo
+           gc_s          TYPE c         VALUE 'S',
+           gc_w          TYPE c         VALUE 'W',
+           gc_t          TYPE c         VALUE 'T',
+           gc_a          TYPE c         VALUE 'A',
+           gc_b          TYPE c         VALUE 'B',
+           gc_c          TYPE c         VALUE 'C',
+           gc_x          TYPE c         VALUE 'X',
+           gc_vacio      TYPE c         VALUE ' ',
+           gc_0          TYPE c         VALUE '0',
+           gc_1          TYPE c         VALUE '1',
+           gc_z          TYPE c         VALUE 'Z',
+           gc_2          TYPE c         VALUE '2',
+           gc_i          TYPE c         VALUE 'I',
+           gc_d          TYPE c         VALUE 'D',
+           gc_u          TYPE c         VALUE 'U',
+           gc_ar(2)      TYPE c         VALUE 'AR',
+           gc_es         TYPE c         VALUE 'S',
+           gc_y1(2)      TYPE c         VALUE 'Y1'.

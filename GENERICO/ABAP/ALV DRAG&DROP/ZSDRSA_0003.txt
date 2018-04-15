@@ -1,0 +1,26 @@
+*&---------------------------------------------------------------------*
+*& Report  ZSDRSA_0003
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT ZSDRSA_0003 MESSAGE-ID tree_control_msg.
+
+INCLUDE ZSDRSA_0003_TOP.
+INCLUDE ZSDRSA_0003_S01.
+INCLUDE ZSDRSA_0003_CL1.
+INCLUDE ZSDRSA_0003_O01.
+INCLUDE ZSDRSA_0003_I01.
+INCLUDE ZSDRSA_0003_F01.
+DATA: LV_STCODE TYPE SY-TCODE VALUE 'ZSD_0035'.
+
+  START-OF-SELECTION.
+
+  AUTHORITY-CHECK OBJECT 'S_TCODE'
+           ID 'TCD' FIELD LV_STCODE.
+  IF sy-subrc NE 0.
+    MESSAGE e172(00) WITH sy-tcode.
+  ENDIF.
+  SET SCREEN 100.

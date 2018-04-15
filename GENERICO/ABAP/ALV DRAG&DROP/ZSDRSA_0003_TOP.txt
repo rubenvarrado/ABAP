@@ -1,0 +1,154 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0003_TOP
+*&---------------------------------------------------------------------*
+CLASS lcl_event_receiver DEFINITION DEFERRED.
+INCLUDE <icon>.
+TABLES: kna1,likp,hrp1000.
+CLASS lcl_application DEFINITION DEFERRED.
+CLASS cl_gui_cfw DEFINITION LOAD.
+
+TYPES: node_table_type LIKE STANDARD TABLE OF mtreesnode
+         WITH DEFAULT KEY.
+* CAUTION: MTREESNODE is the name of the node structure which must
+* be defined by the programmer. DO NOT USE MTREESNODE!
+TYPES: BEGIN OF tys_alv,
+***  TABLA LIKP
+        vbeln TYPE vbeln_vl, " Entrega
+        xblnr TYPE xblnr_likp,
+        bstnk TYPE bstnk, "	OrderID BSTNK en el pedido referencia
+        vstel TYPE vstel, "	Puesto expedición
+        kodat TYPE kodat, "	Fecha prevista picking
+        lfart TYPE lfart, " Clase de entrega
+*        zdomic(30) TYPE c,      "Datos del domicilio
+***  TABLA LIPS
+        matnr TYPE matnr, " material
+        maktx TYPE maktx, " descripcion de material
+        charg	TYPE charg_d," lote
+        lfimg TYPE lfimg, "cantidad
+        werks	TYPE werks_d, "centro
+        lgort	TYPE lgort_d, "almacen
+       END OF tys_alv.
+DATA: gs_alv TYPE tys_alv,
+      gt_alv TYPE TABLE OF tys_alv.
+TYPES: BEGIN OF tys_log,
+***  TABLA LIKP
+        vbeln TYPE vbeln_vl, " Entrega
+        xblnr TYPE xblnr_likp,
+        bstnk TYPE bstnk, "	OrderID BSTNK en el pedido referencia
+        vstel TYPE vstel, "	Puesto expedición
+        kodat TYPE kodat, "	Fecha prevista picking
+        lfart TYPE lfart, " Clase de entrega
+   END OF tys_log.
+DATA: g_application TYPE REF TO lcl_application,
+      g_docking_container_1 TYPE REF TO cl_gui_docking_container,
+      g_docking_container_2 TYPE REF TO cl_gui_docking_container,
+      custom_container2 TYPE REF TO cl_gui_custom_container,
+      g_tree TYPE REF TO cl_gui_simple_tree,
+      g_alv TYPE REF TO cl_gui_alv_grid,
+      g_node_table TYPE node_table_type,
+      event_receiver TYPE REF TO lcl_event_receiver,
+      cont_on_dialog TYPE scrfname VALUE 'BCALVC_EVENT2_D101_C1',
+      grid2  TYPE REF TO cl_gui_alv_grid,
+      gt_fieldcat TYPE lvc_t_fcat WITH HEADER LINE,
+      g_behaviour_tree_set TYPE REF TO cl_dragdrop,
+      g_behaviour_tree_clear TYPE REF TO cl_dragdrop,
+      g_behaviour_alv_set TYPE REF TO cl_dragdrop,
+      g_behaviour_alv_clear TYPE REF TO cl_dragdrop,
+* You may use only one flavor, too. Then you must check
+* if the operation is allowed in the event handler methods.
+* In this case you need only two behaviours.
+*
+      GX_VARIANT LIKE DISVARIANT,
+      Gv_VARIANT LIKE DISVARIANT,
+      Gv_SAVE(1) TYPE C,
+      Gv_EXIT(1) TYPE C,
+      gv_repid LIKE sy-repid,
+      gv_ok_code TYPE sy-ucomm,
+      gv_max TYPE i VALUE 50.
+
+* § 2. Extend your output table for a table (type LVC_T_DRDR)
+*      to handle drag and drop on cells of one line.
+DATA: BEGIN OF gt_outtab OCCURS 0. "with header line...
+        INCLUDE STRUCTURE ZESD_0103.
+*        INCLUDE STRUCTURE sbook.
+DATA:
+      celltab TYPE lvc_t_drdr.  "Table for d&d cell behaviour
+DATA: END OF gt_outtab.
+
+*types: BEGIN OF tys_outtab,
+*        INCLUDE type ZESD_0103,
+*        celltab TYPE lvc_t_drdr,
+*       END OF tys_outtab.
+*data: gs_outtab type tys_outtab.
+data: gs_outtab like LINE OF gt_outtab.
+  TYPES: BEGIN OF tys_HRP1000_1,
+          OBJID TYPE HROBJID, " Entrega
+          SHORT TYPE SHORT_D,
+         END OF tys_HRP1000_1.
+  data: gs_hrp1000_1 type tys_hrp1000_1.
+  data: gt_hrp1000_1 type table of tys_hrp1000_1.
+  data gt_return type table of bapiret2.
+  data gs_return type bapiret2.
+  types: begin of tys_kna1,
+          kunnr type kunnr,
+          name1 type name1_gp, "
+          sortl type sortl,
+         end of tys_kna1.
+  data: gs_kna1 type tys_kna1.
+  data: gt_kna1 type table of tys_kna1.
+  types: begin of tys_kna1_aux,
+          kunnr type kunnr,
+          sortl type sortl,
+         end of tys_kna1_aux.
+  data: gs_kna1_aux type tys_kna1_aux.
+  data: gt_kna1_aux type table of tys_kna1_aux.
+  types: begin of tys_vbpa,
+          vbeln type vbeln, " entrega
+          kunnr type kunnr,
+         end of tys_vbpa.
+  data: gs_vbpa type tys_vbpa.
+  data: gt_vbpa type table of tys_vbpa.
+  types: begin of tys_vbpavbeln,
+          vbeln type vbeln, " entrega,
+         end of tys_vbpavbeln.
+  data: gs_vbpavbeln type tys_vbpavbeln.
+  data: gt_vbpavbeln type table of tys_vbpavbeln.
+*data: gt_outtab type TABLE OF tys_outtab.
+
+* Remark: In table 'CELLTAB' you define one line for each field of your
+*         output table using fields CELLTAB-FIELDNAME and
+*         CELLTAB-DRAGDROPID (see Structure LVC_S_DRDR).
+*         In this way, you can determine a drag and drop behaviour for
+*         a specific field of a line in your output table.
+
+* You need the layout structure of alv to transfer the handle
+* of your defined behaviour (see step 6).
+DATA:   gs_layout TYPE lvc_s_layo,
+        gv_drop_line TYPE i.
+
+DATA: gv_nlhrp1000 TYPE i.
+DATA: gv_nlKNA1 TYPE i.
+*DATA:BEGIN OF GT_HRP1000 OCCURS 0.
+*       INCLUDE STRUCTURE HRP1000.
+*DATA:END OF GT_HRP1000.
+DATA: gs_hrp1000 TYPE hrp1000.
+DATA: gt_hrp1000 TYPE TABLE OF hrp1000.
+
+CONSTANTS: gc_e          TYPE c         VALUE 'E', " Constante para mensaje erróneo
+           gc_s          TYPE c         VALUE 'S',
+           gc_w          TYPE c         VALUE 'W',
+           gc_t          TYPE c         VALUE 'T',
+           gc_a          TYPE c         VALUE 'A',
+           gc_b          TYPE c         VALUE 'B',
+           gc_c          TYPE c         VALUE 'C',
+           gc_x          TYPE c         VALUE 'X',
+           gc_vacio      TYPE c         VALUE ' ',
+           gc_1          TYPE c         VALUE '1',
+           gc_z          TYPE c         VALUE 'Z',
+           gc_i          TYPE c         VALUE 'I',
+           gc_d          TYPE c         VALUE 'D',
+           gc_u          TYPE c         VALUE 'U',
+           gc_ar(2)      TYPE c         VALUE 'AR',
+           gc_es         TYPE c         VALUE 'S',
+           gc_y1(2)      TYPE c         VALUE 'Y1',
+           gc_z001(4)    TYPE c         VALUE 'Z001'.

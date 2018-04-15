@@ -1,0 +1,106 @@
+*----------------------------------------------------------------------*
+*   INCLUDE ZBOCATAO01                           *
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  status_9000  OUTPUT
+*&---------------------------------------------------------------------*
+*       Modulo para dibujar los menus de pantalla y la barra de botones
+*----------------------------------------------------------------------*
+module status_9000 output.
+*
+DATA: BEGIN OF TABLA OCCURS 0,
+        FCODE LIKE RSMPE-FUNC.
+DATA: END   OF TABLA.
+REFRESH  TABLA.    CLEAR  TABLA.
+*
+IF PARTIDA = 'S'.
+  TABLA-FCODE   =  'F_GRABAR' .  APPEND TABLA.
+  TABLA-FCODE   =  'F_BORRAR' .  APPEND TABLA.
+else.
+  TABLA-FCODE   =  'F_TER_PAR' .  APPEND TABLA.
+endif.
+
+  SET PF-STATUS '0100' excluding tabla.
+  SET TITLEBAR '100' with 'Guerra de Barcos'.
+*
+endmodule.                 " status_9000  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  SCREEN_9000  OUTPUT
+*&---------------------------------------------------------------------*
+*       Cambiamos los atributos de los campos de la pantalla.
+*----------------------------------------------------------------------*
+module SCREEN_9000 output.
+*
+IF PARTIDA <> 'S'.   " No ha comenzo la partida, se puede validar.
+  FREE   T_COLOCA.
+  CLEAR  T_COLOCA.
+ENDIF.
+*
+JUG1  =  SY-UNAME.
+*
+LOOP AT SCREEN.
+  CASE SCREEN-NAME.
+    WHEN 'BO_GRABAR' OR 'BO_BORRAR'.
+      IF PARTIDA = 'S'.
+         SCREEN-INPUT = '0'.
+      ELSE.
+         SCREEN-INPUT = '1'.
+      ENDIF.
+      MODIFY SCREEN.
+    WHEN 'BO_TER_PAR'.
+      IF PARTIDA <> 'S'.
+         SCREEN-INPUT = '0'.
+      ELSE.
+         SCREEN-INPUT = '1'.
+      ENDIF.
+      MODIFY SCREEN.
+    WHEN OTHERS.
+      IF PARTIDA <> 'S'.   " No ha comenz la partida, se puede validar.
+        IF SCREEN-NAME+0(1)  =  'P'.
+          MOVE SCREEN-NAME+1(2)   TO    T_COLOCA-LIN .
+          MOVE SCREEN-NAME+3(2)   TO    T_COLOCA-COL .
+          MOVE ' '                TO    T_COLOCA-REV .
+
+          ASSIGN (SCREEN-NAME)    TO  <F_POS> .
+          IF NOT <F_POS>  IS INITIAL.
+            MOVE 'X'              TO    T_COLOCA-MAR .
+          ELSE.
+            MOVE ' '              TO    T_COLOCA-MAR .
+          ENDIF.
+          APPEND   T_COLOCA.
+        ENDIF.
+      ELSE.
+        IF SCREEN-NAME+0(1)  =  'P'.
+          SELECT SINGLE * FROM ZBARCOS_DA INTO ZBARCOS_DA
+                                  WHERE USU1    =   JUG1       AND
+                                        USU2    =   JUG2       AND
+                                        IDEN    =   IDEN       AND
+                                        FECH    =   SY-DATUM   AND
+                                        LINE    =   SCREEN-NAME+1(2) AND
+                                        COLU    =   SCREEN-NAME+3(2) .
+
+          IF  SY-SUBRC = 0 AND ZBARCOS_DA-DADO = 'X'.
+            ASSIGN (SCREEN-NAME)    TO  <F_POS> .
+            IF  ZBARCOS_DA-MARC = 'X'.
+              WRITE ICON_CANCEL               TO   <F_POS>  AS ICON  .
+            ELSE.
+              WRITE ICON_TRANSFER_STRUCTURE   TO   <F_POS>  AS ICON  .
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+  ENDCASE.
+
+ENDLOOP.
+*
+endmodule.                 " SCREEN_9000  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  POSICIONES_PANTALLA  OUTPUT
+*&---------------------------------------------------------------------*
+*      Rellenamos la tabla con todas las posiciones de la pantalla
+*----------------------------------------------------------------------*
+module POSICIONES_PANTALLA output.
+*
+  PERFORM BUSCAR_POSICION.
+*
+endmodule.                 " POSICIONES_PANTALLA  OUTPUT

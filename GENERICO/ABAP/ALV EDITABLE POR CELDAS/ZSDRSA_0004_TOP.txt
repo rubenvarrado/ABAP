@@ -1,0 +1,93 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0004_TOP
+*&---------------------------------------------------------------------*
+
+INCLUDE <icon>.
+
+TABLES: kna1,likp,hrp1000.
+
+  types: begin of tys_kna1,
+          kunnr type kunnr,
+          name1 type name1_gp, "
+          sortl type sortl,
+         end of tys_kna1.
+  types: begin of tys_vbpavbeln,
+          vbeln type vbeln, " entrega,
+         end of tys_vbpavbeln.
+  types: begin of tys_vbpa,
+          vbeln type vbeln, " entrega
+         kunnr type kunnr,
+         end of tys_vbpa.
+*  types: begin of tys_sernp.
+*          include STRUCTURE zesd_0104.
+**  types:  mtart type mara-mtart.
+**  types:  sernp type marc-sernp.
+*  types:  end of tys_sernp.
+  types: begin of tys_outtab_ord_uti.
+          include STRUCTURE zesd_0105.
+  types:  utilizado(1) type c.
+*  types:  sernp type marc-sernp.
+  types:  end of tys_outtab_ord_uti.
+  data: gs_sernp type zesd_0104.
+  data: gt_sernp type TABLE OF zesd_0104.
+
+  data: gs_vbpa type tys_vbpa.
+  data: gt_vbpa type table of tys_vbpa.
+  data: gs_vbpavbeln type tys_vbpavbeln.
+  data: gt_vbpavbeln type table of tys_vbpavbeln.
+  data: gt_outtab1 type table of zesd_0104.
+  data: gt_outtab2 type table of zesd_0104.
+  data: gt_outtab_alv type table of zesd_0104.
+  data: gs_outtab type zesd_0104.
+  data: gt_outtab type table of zesd_0104.
+  data: gs_outtab_ord_uti type tys_outtab_ord_uti.
+  data: gt_outtab_ord_uti type TABLE OF tys_outtab_ord_uti.
+  data: gs_outtab_ord type zesd_0105.
+  data: gt_outtab_ord type table of zesd_0105.
+  data: gs_ztsd_0051 type ztsd_0051.
+  data: gt_ztsd_0051 type table of ztsd_0051.
+  data: gs_alv type zesd_0104,
+        gt_alv type table of zesd_0104.
+  data: gs_kna1 type tys_kna1.
+  data: gt_kna1 type table of tys_kna1.
+  data: gs_ztsd_0052 type ztsd_0052.
+  data: gt_ztsd_0052 type table of ztsd_0052.
+RANGES: R_KUNNR FOR KNA1-KUNNR.
+CONSTANTS: gc_e          TYPE c         VALUE 'E',
+           gc_s          TYPE c         VALUE 'S',
+           gc_w          TYPE c         VALUE 'W',
+           gc_t          TYPE c         VALUE 'T',
+           gc_a          TYPE c         VALUE 'A',
+           gc_b          TYPE c         VALUE 'B',
+           gc_c          TYPE c         VALUE 'C',
+           gc_x          TYPE c         VALUE 'X',
+           gc_vacio      TYPE c         VALUE ' ',
+           gc_1          TYPE c         VALUE '1',
+           gc_z          TYPE c         VALUE 'Z',
+           gc_i          TYPE c         VALUE 'I',
+           gc_d          TYPE c         VALUE 'D',
+           gc_u          TYPE c         VALUE 'U',
+           gc_ar(2)      TYPE c         VALUE 'AR',
+           gc_eq(2)      TYPE c         VALUE 'EQ',
+           gc_es         TYPE c         VALUE 'S',
+           gc_zbc1(4)    TYPE c         VALUE 'ZBC1',
+           gc_zin1(4)    TYPE c         VALUE 'ZIN1',
+           gc_zin2(4)    TYPE c         VALUE 'ZIN2',
+           gc_y1(2)      TYPE c         VALUE 'Y1',
+           gc_z001(4)    TYPE c         VALUE 'Z001'.
+
+** ALV
+DATA :  GS_FIELDCAT   TYPE  lvc_s_fcat, "Field catalog work area
+        GT_FIELDCAT   TYPE  lvc_t_fcat. "field catalog internal table
+*        GT_FIELDCAT   TYPE  SLIS_T_FIELDCAT_ALV. "field catalog internal table
+DATA :  "GT_LAYOUT     TYPE SLIS_LAYOUT_ALV, "ALV layout settings
+      gt_layout    TYPE lvc_s_layo,
+        FORM_TOP_OF_PAGE  TYPE SLIS_FORMNAME VALUE 'FORM_TOP_OF_PAGE', "for avl header.
+        FORM_CALLBACK TYPE SLIS_FORMNAME VALUE 'USER_COMMAND'. "For user command
+data: gx_variant like disvariant,
+      gv_variant like disvariant,
+      gv_save(1) type c,
+      gv_exit(1) type c,
+      gv_repid like sy-repid,
+      gv_ok_code type sy-ucomm,
+      gv_max type i value 50.

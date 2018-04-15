@@ -1,0 +1,296 @@
+*
+*
+* REPORT                                                               *
+*                                                                      *
+* DESCRIPCIÓN:  PRUEBAS 001                                            *
+*                                                                      *
+*                                                                      *
+* MÓDULO AL QUE PERTENECE:                                             *
+*                                                                      *
+* AUTOR:        EMPRESA:          FECHA:                               *
+*                                                                      *
+*----------------------------------------------------------------------*
+* CONTROL DE MODIFICACIONES                                            *
+*   AUTOR            EMPRESA         FECHA        MOTIVO               *
+* ..........        .........     DD/MM/AA    .........................*
+* ..........        .........     DD/MM/AA    .........................*
+*----------------------------------------------------------------------*
+* PARÁMETROS DE ENTRADA: Nombre:.............Descripcion:..............*
+*                        Nombre:.............Descripcion:..............*
+*                                                                      *
+* SALIDA DEL PROGRAMA: Nombre:.............Descripcion:............... *
+*                      Nombre:.............Descripcion:............... *
+*                                                                      *
+************************************************************************
+**
+*********************************************************************
+*   Jagp.- H267863 20.04.2010.- Modificaciones por Upgrade y cambio
+*  por unicode, se modifica el codigo afectado por el Upgrade o por
+*  el Unicode y se marca el flag de Unicode en el programa.
+*********************************************************************
+**
+REPORT zfirtr27.
+
+
+************************************************************************
+*  DEFINICION DE INCLUDES
+************************************************************************
+INCLUDE zbcx0004.
+INCLUDE zbcx0005.
+
+************************************************************************
+*  DEFINICIONES (DEFINES)
+************************************************************************
+*DEFINE AP.
+*  APPEND &1 TO I_SOURCE.
+*END-OF-DEFINITION.
+
+************************************************************************
+*  DEFINICION DE TABLAS DEL SISTEMA
+************************************************************************
+TABLES : trdir.      " R/3-DD: Textos de tablas SAP
+*         DD03L.      " Campos de tabla
+************************************************************************
+*  DEFINICION DE CONSTANTES
+************************************************************************
+************************************************************************
+*  DEFINICION DE VARIABLES
+************************************************************************
+DATA : d_prog_name LIKE sy-cprog, " Nombre del programa temporal
+       d_linea(80),          " Donde se componen las lineas del P.temp
+       d_mandt,
+       d_tabla,
+       d_resp,               " Respuesta de popup
+       d_fichero(70).        " Nombre y ruta del fichero
+
+************************************************************************
+*  DEFINICION DE ESTRUCTURAS
+************************************************************************
+* Definicion de la estructura
+*data : begin of r_xxxxxxxx,
+*            yyyyyyyyyy,    " descripción
+*            zzzzzzzzzz,    " descripción
+*       end of r_xxxxxxxx.
+************************************************************************
+*  DEFINICION DE TABLAS INTERNAS
+************************************************************************
+* Tabla interna para almacenar el programa temporal
+DATA : i_source LIKE line OCCURS 200 WITH HEADER LINE.
+
+************************************************************************
+*  DEFINICION DE PARAMETROS
+************************************************************************
+*parameters: p_xxxxxx,         " descripción
+*            p_yyyyyy.         " descripción
+************************************************************************
+*  DEFINICION DE RANGO DE SELECCION
+************************************************************************
+*select-options s_xxxxxx for xxxx,     " descripción
+*               s_yyyyyy for yyyy.     " descripción
+
+************************************************************************
+*  DEFINICION DE LA PANTALLA DE SELECCION
+************************************************************************
+SELECTION-SCREEN SKIP 1.
+
+* Cuadro 1 -------------------------------------------------------------
+SELECTION-SCREEN BEGIN OF BLOCK 1 WITH FRAME TITLE text-001.
+PARAMETERS: p_path  LIKE rlgrap-filename .
+PARAMETERS: P_REPOR LIKE SY-REPID DEFAULT 'ZFIRTR28' OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK 1.
+
+************************************************************************
+*  DEFINICION DE FIELD-SYMBOLS
+************************************************************************
+*field-symbol <xx>.                  " descripción
+************************************************************************
+*  DEFINICION DE FIELD-GROUPS
+************************************************************************
+*field-groups : xxx,                 " descripción
+*               yyy.                 " descripción
+
+
+************************************************************************
+****************************definición de info tipos (sólo RRHH)
+************************************************************************
+
+
+************************************************************************
+*
+*  LOGICA DEL PROGRAMA
+*
+************************************************************************
+
+************************************************************************
+*  definicion de inicializaciones
+************************************************************************
+INITIALIZATION.
+
+
+************************************************************************
+*  proceso principal
+************************************************************************
+START-OF-SELECTION.
+
+* Se carga en la tabla interna el cod
+  PERFORM cargar_fichero.
+  IF NOT i_source[] IS INITIAL.
+*    INSERT REPORT 'ZFIRTR28' FROM i_source .
+    INSERT REPORT P_REPOR FROM i_source .
+    IF sy-subrc = 0.
+      MESSAGE i006(zx) WITH 'Todo fue correctamente'.
+    ENDIF.
+  ENDIF.
+*
+************************************************************************
+*  acciones de final de proceso
+************************************************************************
+*end-of-selection.
+
+
+************************************************************************
+*  definiciones de cabeceras de listado
+************************************************************************
+*top-of-page.
+
+************************************************************************
+*  definiciones de lineas de pie de listado
+************************************************************************
+*end-of-page.
+
+************************************************************************
+*  definiciones de acciones atomar en caso de selección con doble click
+************************************************************************
+*at-line-selection.
+
+************************************************************************
+*  definicion y control de acciones a tomar según entrada de usuario
+************************************************************************
+*at user-command.
+
+************************************************************************
+*  definicion y control de acciones a tomar según la tecla de función
+************************************************************************
+*at pfn.
+
+************************************************************************
+* definicion de las validaciones a realizar de los parámetros de entrada
+************************************************************************
+
+AT SELECTION-SCREEN ON BLOCK 1.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
+  DATA :
+  i_tabla LIKE sdokpath OCCURS 0 WITH HEADER LINE.
+
+  CALL FUNCTION 'TMP_GUI_FILE_OPEN_DIALOG'
+      EXPORTING
+           window_title      = 'Seleccione fichero cód.'
+*         DEFAULT_EXTENSION =
+*         DEFAULT_FILENAME  =
+*         FILE_FILTER       =
+*         INIT_DIRECTORY    =
+*         MULTISELECTION    =
+*    IMPORTING
+*         RC                =
+       TABLES
+            file_table        = i_tabla
+*    EXCEPTIONS
+*         CNTL_ERROR        = 1
+*         OTHERS            = 2
+            .
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+  READ TABLE i_tabla INDEX 1.
+  p_path = i_tabla-pathname.
+* chequea que se informe la ruta de fichero
+AT SELECTION-SCREEN ON p_path.
+
+  IF ( p_path IS INITIAL ).
+    MESSAGE e208(00) WITH 'Indique ruta de fichero'.
+  ENDIF.
+
+************************************************************************
+*              FORMS ADICIONALES
+************************************************************************
+
+*&---------------------------------------------------------------------*
+*&      Form  CARGAR_fichero
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM cargar_fichero.
+
+*   Jagp.- H267863. upgrade. inicio.
+  data: fi type string.
+  fi  =  p_path.
+  CALL FUNCTION 'GUI_UPLOAD'
+    EXPORTING
+      FILENAME                      = fi
+*     FILETYPE                      = 'ASC'
+*   IMPORTING
+*     FILELENGTH                    =
+*     HEADER                        =
+    TABLES
+      DATA_TAB                      = i_source
+   EXCEPTIONS
+     FILE_OPEN_ERROR               = 1
+     FILE_READ_ERROR               = 2
+     NO_BATCH                      = 3
+     GUI_REFUSE_FILETRANSFER       = 4
+     INVALID_TYPE                  = 5
+     NO_AUTHORITY                  = 6
+     UNKNOWN_ERROR                 = 7
+     BAD_DATA_FORMAT               = 8
+     HEADER_NOT_ALLOWED            = 9
+     SEPARATOR_NOT_ALLOWED         = 10
+     HEADER_TOO_LONG               = 11
+     UNKNOWN_DP_ERROR              = 12
+     ACCESS_DENIED                 = 13
+     DP_OUT_OF_MEMORY              = 14
+     DISK_FULL                     = 15
+     DP_TIMEOUT                    = 16
+     OTHERS                        = 17  .
+
+*  CALL FUNCTION 'WS_UPLOAD'
+*      EXPORTING
+**         CODEPAGE                = ' '
+*           filename                 = p_path
+**         FILETYPE                = 'ASC'
+**         HEADLEN                 = ' '
+**         LINE_EXIT               = ' '
+**         TRUNCLEN                = ' '
+**         USER_FORM               = ' '
+**         USER_PROG               = ' '
+**         DAT_D_FORMAT            = ' '
+**    IMPORTING
+**         FILELENGTH              =
+*       TABLES
+*            data_tab                =  i_source
+*    EXCEPTIONS
+*         conversion_error        = 1
+*         file_open_error         = 2
+*         file_read_error         = 3
+*         invalid_type            = 4
+*         no_batch                = 5
+*         unknown_error           = 6
+*         invalid_table_width     = 7
+*         gui_refuse_filetransfer = 8
+*         customer_error          = 9
+*         OTHERS                  = 10
+*            .
+*   jagp.- H267863 fin.
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    MESSAGE e208(00) WITH 'Error en la carga'.
+    EXIT.
+  ENDIF.
+
+ENDFORM.                    " CARGAR_fichero

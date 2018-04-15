@@ -1,0 +1,27 @@
+**INCLUDE ZBCXER01
+
+*---------------------------------------------------------------------*
+*       FORM GENERAR_ERROR                                            *
+*---------------------------------------------------------------------*
+*   Se muestra un mensaje                                             *
+*---------------------------------------------------------------------*
+*  -->  p_clase    Clase de mensajes                                  *
+*  -->  P_tipo     Tipo del mensaje                                   *
+*  -->  P_number   Número de mensaje                                  *
+*  -->  p_param1   Parametro 1                                        *
+*  -->  p_param2   Parametro 2                                        *
+*---------------------------------------------------------------------*
+FORM generar_error USING value(p_clase)
+                         value(p_tipo)
+                         value(p_number)
+                         value(p_param1)
+                         value(p_param2).
+
+  IF p_clase IS INITIAL.
+    WRITE: / 'Mensaje sin definir'.                         "#EC NOTEXT
+  ELSE.
+    MESSAGE ID p_clase TYPE p_tipo NUMBER p_number WITH p_param1
+                                                        p_param2.
+  ENDIF.
+
+ENDFORM.                               " GENERAR_ERROR

@@ -1,0 +1,104 @@
+***INCLUDE ZBCXBI04.
+****
+************************************************************************
+*  Modificacion: David González - Indra
+*  Fecha:        24.03.2010.
+*  Descripción: Adaptación al Unicode
+
+*  Buscar DGM267863
+*  Codigo HUNO: 267863.
+***********************************************************************
+
+*---------------------------------------------------------------------*
+*       FORM ABRIR_FICHERO_LECTURA                                    *
+*---------------------------------------------------------------------*
+*  Se abre un fichero de lectura de datos                             *
+*---------------------------------------------------------------------*
+*  -->  PE_FICHERO    Ruta del fichero                                *
+*---------------------------------------------------------------------*
+**
+*********************************************************************
+*   Jagp.- H267863 20.04.2010.- Modificaciones por Upgrade y cambio
+*  por unicode, se modifica el codigo afectado por el Upgrade o por
+*  el Unicode y se marca el flag de Unicode en el programa.
+*********************************************************************
+**
+FORM ABRIR_FICHERO_LECTURA USING PE_FICHERO.
+
+  OPEN DATASET PE_FICHERO FOR INPUT IN TEXT MODE
+              ENCODING DEFAULT."DGM267863
+  IF SY-SUBRC <> 0.
+    PERFORM GENERAR_ERROR USING 'ZM' 'E' '003' PE_FICHERO SPACE.
+  ENDIF.
+
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM ABRIR_FICHERO_ESCRITURA                                  *
+*---------------------------------------------------------------------*
+*  Se abre un fichero de escritura de datos                           *
+*---------------------------------------------------------------------*
+*  -->  PE_FICHERO    Ruta del fichero                                *
+*---------------------------------------------------------------------*
+FORM ABRIR_FICHERO_ESCRITURA USING PE_FICHERO.
+
+  OPEN DATASET PE_FICHERO FOR OUTPUT IN TEXT MODE
+              ENCODING DEFAULT."DGM267863.
+
+  IF SY-SUBRC <> 0.
+    PERFORM GENERAR_ERROR USING 'ZM' 'E' '003' PE_FICHERO SPACE.
+  ENDIF.
+
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM CERRAR_FICHERO                                           *
+*---------------------------------------------------------------------*
+* Se cierra un fichero                                                *
+*---------------------------------------------------------------------*
+*  -->  PE_FICHERO      Ruta del fichero                              *
+*---------------------------------------------------------------------*
+FORM CERRAR_FICHERO USING PE_FICHERO.
+
+  CLOSE DATASET PE_FICHERO.
+
+  IF SY-SUBRC <> 0.
+    PERFORM GENERAR_ERROR USING 'ZM' 'E' '004' PE_FICHERO SPACE.
+  ENDIF.
+
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM RECUPERAR_RUTA                                           *
+*---------------------------------------------------------------------*
+*  Se recupera la ruta asociada a un fichero lógico                   *
+*---------------------------------------------------------------------*
+*  -->  PE_FICHLOG         Fichero Lógico                             *
+*  -->  PS_RUTA            Ruta                                       *
+*---------------------------------------------------------------------*
+FORM RECUPERAR_RUTA USING PE_FICHLOG
+                          PS_RUTA.
+
+  CALL FUNCTION 'FILE_GET_NAME'
+       EXPORTING
+*          CLIENT                  = SY-MANDT
+            LOGICAL_FILENAME        =  PE_FICHLOG
+*          OPERATING_SYSTEM        = SY-OPSYS
+*          PARAMETER_1             = ' '
+*          PARAMETER_2             = ' '
+*          USE_PRESENTATION_SERVER = ' '
+*          WITH_FILE_EXTENSION     = ' '
+*          USE_BUFFER              = ' '
+       IMPORTING
+*          EMERGENCY_FLAG          =
+*          FILE_FORMAT             =
+            FILE_NAME               = PS_RUTA
+       EXCEPTIONS
+            FILE_NOT_FOUND          = 1
+            OTHERS                  = 2.
+
+  IF SY-SUBRC <> 0.
+    PERFORM GENERAR_ERROR USING 'ZM' 'E' '005' PE_FICHLOG SPACE.
+  ENDIF.
+
+ENDFORM.

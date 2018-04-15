@@ -1,0 +1,20 @@
+*&---------------------------------------------------------------------*
+*& Report  ZSDRSA_0004
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT ZSDRSA_0004.
+
+INCLUDE ZSDRSA_0004_TOP.
+INCLUDE ZSDRSA_0004_S01.
+INCLUDE ZSDRSA_0004_F01.
+
+
+START-OF-SELECTION.
+perform f_authority.
+perform f_seleccion_datos.
+perform f_rellenar_tabla_alv.
+perform f_alv_editable.

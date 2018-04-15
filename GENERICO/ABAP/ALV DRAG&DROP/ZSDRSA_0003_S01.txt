@@ -1,0 +1,47 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSDRSA_0003_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK bl1 WITH FRAME TITLE text-001.
+
+SELECT-OPTIONS: so_vstel  FOR likp-vstel  OBLIGATORY DEFAULT 'AR03',
+                so_kodat FOR likp-kodat OBLIGATORY DEFAULT SY-DATUM,
+                so_lfart FOR likp-lfart,
+                so_vbeln FOR likp-vbeln.
+*                so_idoc FOR gv_idoc.
+SELECTION-SCREEN END OF BLOCK bl1.
+
+SELECTION-SCREEN BEGIN OF BLOCK bl2 WITH FRAME TITLE text-002.
+select-OPTIONS : so_kunnr for kna1-kunnr.
+*SELECT-OPTIONS: so_plvar  FOR hrp1000-plvar DEFAULT '01',
+*                so_otype FOR hrp1000-plvar DEFAULT 'A'.
+SELECTION-SCREEN END OF BLOCK bl2.
+
+SELECTION-SCREEN BEGIN OF BLOCK bl3 WITH FRAME TITLE TEXT-003.
+PARAMETERS: Pa_VARI LIKE DISVARIANT-VARIANT.
+SELECTION-SCREEN END OF BLOCK bl3.
+
+*AT SELECTION-SCREEN ON pa_werks.
+*  PERFORM f_check_authority.
+
+INITIALIZATION.
+  Gv_REPID = SY-REPID.
+  Gv_SAVE = 'A'.
+  PERFORM f_VARIANT_INIT.
+* Get default variant
+  GX_VARIANT = Gv_VARIANT.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+       EXPORTING
+            I_SAVE     = Gv_SAVE
+       CHANGING
+            CS_VARIANT = GX_VARIANT
+       EXCEPTIONS
+            NOT_FOUND  = 2.
+  IF SY-SUBRC = 0.
+    Pa_VARI = GX_VARIANT-VARIANT.
+  ENDIF.
+* Process on value request
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR Pa_VARI.
+  PERFORM F4_FOR_VARIANT.
+
+AT SELECTION-SCREEN.
+  PERFORM f_PAI_OF_SELECTION_SCREEN.

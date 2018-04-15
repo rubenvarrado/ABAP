@@ -1,0 +1,37 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZMMIGN_0010_S01
+*&---------------------------------------------------------------------*
+
+* Custom Selection Screen 1010
+selection-screen begin of screen 1010 as subscreen.
+selection-screen begin of block b1 with frame title text-001.
+
+parameters: pa_vbeln TYPE likp-vbeln matchcode object VMVM." OBLIGATORY.
+*select-options: so_vbeln for likp-vbeln NO INTERVALS.
+
+selection-screen end of block b1.
+selection-screen end of screen 1010.
+
+AT SELECTION-SCREEN.
+  PERFORM validate_fields.
+*VMVM
+*&---------------------------------------------------------------------*
+*&      Form  VALIDATE_FIELDS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM VALIDATE_FIELDS .
+
+*  CHECK sy-ucomm(1) NE '%'.
+if NOT ( sy-ucomm EQ 'BACK' OR
+         sy-ucomm EQ 'EXIT' ).
+IF pa_vbeln IS INITIAL.
+*   Complete todos los campos obligatorios
+    MESSAGE e055(00).
+    LEAVE PROGRAM.
+endif.
+endif.
+ENDFORM.                    " VALIDATE_FIELDS
