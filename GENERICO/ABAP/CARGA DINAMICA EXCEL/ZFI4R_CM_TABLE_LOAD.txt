@@ -1,0 +1,38 @@
+REPORT ZFI4R_CM_TABLE_LOAD.
+*&---------------------------------------------------------------------*
+*& Report  ZTABLE_LOAD                                                 *
+*&                                                                     *
+*&---------------------------------------------------------------------** Este programa carga los datos en cualquier Tabla especificados en la
+* pantalla de selección.
+* El Archivo debe ser txt, delimitado por TAB y el orden de los campos
+* en el archivo plano debe
+* corresponder con los campos de la tabla.
+*- Valores en pesos sin puntos ni comas
+*- Fechas sin puntos
+*
+*-Considera 3 lineas de cabecera para documentación
+*&---------------------------------------------------------------------*
+include ZFI4R_CM_TABLE_LOAD_TOP.
+include ZFI4R_CM_TABLE_LOAD_S01.
+
+include ZFI4R_CM_TABLE_LOAD_F00. " OO
+include ZFI4R_CM_TABLE_LOAD_F01. " Subrutinas
+
+INITIALIZATION.
+
+START-OF-SELECTION.
+
+  PERFORM f_crear_estructura.
+  PERFORM f_rellenar_catalogo.
+  if p_mass is not initial.
+  PERFORM f_construir_tabla.
+  endif.
+  PERFORM f_construir_tabla_nuevo CHANGING it_handle_columns[].
+
+  PERFORM f_cargar_tabla_excel.
+
+*  PERFORM f_cargar_o_borrar.
+
+  PERFORM f_chequeo_tabla.
+  PERFORM f_update_tabla.
+  PERFORM f_alv_grid." TABLES t_alv.
